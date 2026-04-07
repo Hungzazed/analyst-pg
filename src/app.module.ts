@@ -7,6 +7,7 @@ import {
   KafkaModule,
   RedisModule,
   PostgresModule,
+  PrismaModule,
 } from './infrastructure';
 
 @Module({
@@ -19,6 +20,7 @@ import {
     KafkaModule,
     RedisModule,
     PostgresModule,
+    PrismaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

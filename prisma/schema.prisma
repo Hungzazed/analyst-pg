@@ -1,0 +1,15 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model MetadataStore {
+  metaKey   String   @id @map("meta_key")
+  metaValue Json     @map("meta_value")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("metadata_store")
+}
