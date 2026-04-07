@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ClickHouseModule, KafkaModule, RedisModule } from './infrastructure';
+import {
+  ClickHouseModule,
+  KafkaModule,
+  RedisModule,
+  PostgresModule,
+} from './infrastructure';
 
 @Module({
   imports: [
@@ -13,6 +18,7 @@ import { ClickHouseModule, KafkaModule, RedisModule } from './infrastructure';
     ClickHouseModule,
     KafkaModule,
     RedisModule,
+    PostgresModule,
   ],
   controllers: [AppController],
   providers: [AppService],

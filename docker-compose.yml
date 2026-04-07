@@ -74,6 +74,25 @@ services:
     networks:
       - analyst-network
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: analyst-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: analyst_metadata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d analyst_metadata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - analyst-network
+
   # Optional: Kafka UI for monitoring
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -95,6 +114,8 @@ volumes:
   kafka_data:
     driver: local
   redis_data:
+    driver: local
+  postgres_data:
     driver: local
 
 networks:
