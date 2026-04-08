@@ -4,7 +4,7 @@ import { createClient, ClickHouseClient } from '@clickhouse/client';
 
 @Injectable()
 export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
-  private client: ClickHouseClient;
+  private client!: ClickHouseClient;
   private readonly logger = new Logger(ClickHouseService.name);
 
   constructor(private configService: ConfigService) {}
@@ -42,39 +42,5 @@ export class ClickHouseService implements OnModuleInit, OnModuleDestroy {
       throw new Error('ClickHouse client is not initialized');
     }
     return this.client;
-  }
-
-  async query(sql: string, params?: any[]) {
-    try {
-      const result = await this.client.query({
-        query: sql,
-        query_params: params ? Object.fromEntries(
-          params.map((param, index) => [`param${index}`, param])
-        ) : undefined,
-      });
-      return result;
-    } catch (error) {
-      this.logger.error(`Query failed: ${sql}`, error);
-      throw error;
-    }
-  }
-
-  async insert(table: string, data: any[], format: string = 'JSONEachRow') {
-    try {
-      await this.client.insert({
-        table,
-        values: data,
-        format: format as any,
-      });
-    } catch (error) {
-      this.logger.error(`Insert failed for table: ${table}`, error);
-      throw error;
-    }
-  }
-
-  async select(table: string, conditions?: string, limit: number = 100) {
-    const whereClause = conditions ? `WHERE ${conditions}` : '';
-    const sql = `SELECT * FROM ${table} ${whereClause} LIMIT ${limit}`;
-    return this.query(sql);
   }
 }
