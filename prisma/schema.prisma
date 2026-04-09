@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -40,6 +39,7 @@ model Website {
   apiKeys   ApiKey[]
   sessions  Session[]
   events    Event[]
+  eventDailies EventDaily[]
 
   createdAt DateTime @default(now())
 }
