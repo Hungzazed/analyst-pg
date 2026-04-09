@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import {
-  ClickHouseModule,
   KafkaModule,
   RedisModule,
   PostgresModule,
@@ -16,7 +15,6 @@ import {
       isGlobal: true,
       envFilePath: '.env',
     }),
-    ClickHouseModule,
     KafkaModule,
     RedisModule,
     PostgresModule,

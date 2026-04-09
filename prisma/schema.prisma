@@ -4,12 +4,113 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-model MetadataStore {
-  metaKey   String   @id @map("meta_key")
-  metaValue Json     @map("meta_value")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+enum Role {
+  USER
+  ADMIN
+}
 
-  @@map("metadata_store")
+enum EventType {
+  PAGEVIEW
+  CLICK
+  CUSTOM
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+
+  websites  Website[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Website {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String   @unique
+  userId    String
+
+  user      User     @relation(fields: [userId], references: [id])
+  apiKeys   ApiKey[]
+  sessions  Session[]
+  events    Event[]
+
+  createdAt DateTime @default(now())
+}
+
+model ApiKey {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  websiteId  String
+
+  website    Website  @relation(fields: [websiteId], references: [id])
+
+  createdAt  DateTime @default(now())
+  revoked    Boolean  @default(false)
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  websiteId   String
+
+  ip          String?
+  userAgent   String?
+  country     String?
+  device      String?
+  browser     String?
+  os          String?
+
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
+
+  website     Website  @relation(fields: [websiteId], references: [id])
+  events      Event[]
+
+  @@index([websiteId, createdAt])
+}
+
+model Event {
+  id         String     @id @default(uuid())
+  websiteId  String
+  sessionId  String?
+
+  type       EventType
+  url        String?
+  referrer   String?
+
+  ip         String?
+  country    String?
+  device     String?
+  browser    String?
+  os         String?
+
+  createdAt  DateTime   @default(now())
+
+  website    Website    @relation(fields: [websiteId], references: [id])
+  session    Session?   @relation(fields: [sessionId], references: [id])
+
+  @@index([websiteId, createdAt])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model EventDaily {
+  id         String   @id @default(uuid())
+  websiteId  String
+  date       DateTime
+
+  pageviews  Int      @default(0)
+  visits     Int      @default(0)
+  uniques    Int      @default(0)
+
+  website    Website  @relation(fields: [websiteId], references: [id])
+
+  @@unique([websiteId, date])
+  @@index([websiteId, date])
 }
