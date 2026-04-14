@@ -58,6 +58,8 @@ model ApiKey {
 model Session {
   id          String   @id @default(uuid())
   websiteId   String
+  externalSessionId String?
+  userId      String?
 
   ip          String?
   userAgent   String?
@@ -73,22 +75,30 @@ model Session {
   events      Event[]
 
   @@index([websiteId, createdAt])
+  @@unique([websiteId, externalSessionId])
 }
 
 model Event {
   id         String     @id @default(uuid())
   websiteId  String
   sessionId  String?
+  eventId    String
+  userId     String?
 
   type       EventType
+  title      String?
   url        String?
   referrer   String?
+  userAgent  String?
 
   ip         String?
   country    String?
   device     String?
   browser    String?
   os         String?
+  metadata   Json?
+
+  occurredAt DateTime
 
   createdAt  DateTime   @default(now())
 
@@ -96,8 +106,10 @@ model Event {
   session    Session?   @relation(fields: [sessionId], references: [id])
 
   @@index([websiteId, createdAt])
+  @@index([websiteId, occurredAt])
   @@index([sessionId])
   @@index([createdAt])
+  @@unique([websiteId, eventId])
 }
 
 model EventDaily {

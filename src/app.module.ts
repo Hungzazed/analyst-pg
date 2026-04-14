@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth';
+import { MetricsModule } from './modules/metrics';
 import { WebsiteModule } from './modules/website';
 import {
   KafkaModule,
@@ -23,6 +24,7 @@ import {
     PrismaModule,
     AuthModule,
     WebsiteModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
