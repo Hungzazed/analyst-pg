@@ -6,15 +6,31 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiHeader,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
 import { MetricsService } from './metrics.service';
 
 @Controller('metrics')
+@ApiTags('Metrics')
 export class MetricsController {
   constructor(private readonly metricsService: MetricsService) {}
 
   @Post('events')
+  @ApiOperation({ summary: 'Ingest analytics event' })
+  @ApiHeader({
+    name: 'x-api-key',
+    required: true,
+    description: 'Website API key',
+  })
+  @ApiOkResponse({ description: 'Event ingested successfully' })
+  @ApiBadRequestResponse({ description: 'Missing x-api-key or invalid payload' })
   ingestEvent(
     @Headers('x-api-key') apiKey: string | undefined,
     @Body() ingestMetricDto: IngestMetricDto,
