@@ -47,7 +47,9 @@ export class WebsiteService {
     }
 
     if (website.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to view this website');
+      throw new ForbiddenException(
+        'You do not have permission to view this website',
+      );
     }
 
     return website;
@@ -118,7 +120,9 @@ export class WebsiteService {
       }
     }
 
-    throw new ConflictException('Failed to generate unique API key, please retry');
+    throw new ConflictException(
+      'Failed to generate unique API key, please retry',
+    );
   }
 
   async createApiKey(userId: string, websiteId: string) {
@@ -168,7 +172,9 @@ export class WebsiteService {
       }
     }
 
-    throw new ConflictException('Failed to generate unique API key, please retry');
+    throw new ConflictException(
+      'Failed to generate unique API key, please retry',
+    );
   }
 
   async getActiveApiKeys(userId: string, websiteId: string) {
@@ -228,7 +234,11 @@ export class WebsiteService {
     });
   }
 
-  async update(userId: string, websiteId: string, updateWebsiteDto: UpdateWebsiteDto) {
+  async update(
+    userId: string,
+    websiteId: string,
+    updateWebsiteDto: UpdateWebsiteDto,
+  ) {
     const website = await this.prismaService.website.findUnique({
       where: { id: websiteId },
       select: { id: true, userId: true },
@@ -239,7 +249,9 @@ export class WebsiteService {
     }
 
     if (website.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to update this website');
+      throw new ForbiddenException(
+        'You do not have permission to update this website',
+      );
     }
 
     const data: UpdateWebsiteDto = {
@@ -278,7 +290,9 @@ export class WebsiteService {
     }
 
     if (website.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to delete this website');
+      throw new ForbiddenException(
+        'You do not have permission to delete this website',
+      );
     }
 
     await this.prismaService.website.delete({
@@ -300,7 +314,9 @@ export class WebsiteService {
     }
   }
 
-  private getUniqueTarget(error: Prisma.PrismaClientKnownRequestError): string[] {
+  private getUniqueTarget(
+    error: Prisma.PrismaClientKnownRequestError,
+  ): string[] {
     const target = error.meta?.target;
 
     if (Array.isArray(target)) {
@@ -314,7 +330,10 @@ export class WebsiteService {
     return [];
   }
 
-  private async assertWebsiteOwnership(userId: string, websiteId: string): Promise<void> {
+  private async assertWebsiteOwnership(
+    userId: string,
+    websiteId: string,
+  ): Promise<void> {
     const website = await this.prismaService.website.findUnique({
       where: { id: websiteId },
       select: { id: true, userId: true },
@@ -325,7 +344,9 @@ export class WebsiteService {
     }
 
     if (website.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to access this website');
+      throw new ForbiddenException(
+        'You do not have permission to access this website',
+      );
     }
   }
 }

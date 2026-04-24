@@ -2,16 +2,20 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import {
   ApiBearerAuth,
+  ApiForbiddenResponse,
   ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../common';
@@ -30,11 +34,33 @@ export class AuthController {
   }
 
   @Post('login')
-  @ApiOperation({ summary: 'Login and receive access token' })
+  @ApiOperation({ summary: 'Login and receive access token + refresh token' })
   @ApiOkResponse({ description: 'Login successful' })
   @ApiUnauthorizedResponse({ description: 'Email or password is incorrect' })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Post('refresh')
+  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiOkResponse({ description: 'Tokens refreshed successfully' })
+  @ApiForbiddenResponse({ description: 'Refresh token is invalid or expired' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  refresh(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.refresh(refreshTokenDto.refreshToken);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Logout current user and revoke refresh session(s)',
+  })
+  @ApiOkResponse({ description: 'Logout successful' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing access token' })
+  @ApiForbiddenResponse({ description: 'Refresh token is invalid' })
+  logout(@CurrentUser() user: AuthUser, @Body() logoutDto: LogoutDto) {
+    return this.authService.logout(user.id, logoutDto.refreshToken);
   }
 
   @Get('me')

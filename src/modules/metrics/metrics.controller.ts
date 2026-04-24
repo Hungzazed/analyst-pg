@@ -30,7 +30,9 @@ export class MetricsController {
     description: 'Website API key',
   })
   @ApiOkResponse({ description: 'Event ingested successfully' })
-  @ApiBadRequestResponse({ description: 'Missing x-api-key or invalid payload' })
+  @ApiBadRequestResponse({
+    description: 'Missing x-api-key or invalid payload',
+  })
   ingestEvent(
     @Headers('x-api-key') apiKey: string | undefined,
     @Body() ingestMetricDto: IngestMetricDto,

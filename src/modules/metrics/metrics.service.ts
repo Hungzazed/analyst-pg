@@ -80,7 +80,10 @@ export class MetricsService {
       }
 
       const ip = this.normalize(input.dto.ip ?? input.ip, 64);
-      const userAgent = this.normalize(input.dto.userAgent ?? input.userAgent, 512);
+      const userAgent = this.normalize(
+        input.dto.userAgent ?? input.userAgent,
+        512,
+      );
       const country = this.normalize(input.dto.country, 64);
       const device = this.normalize(input.dto.device, 128);
       const browser = this.normalize(input.dto.browser, 128);
@@ -203,7 +206,11 @@ export class MetricsService {
       const visitsIncrement = isNewSession ? 1 : 0;
       const uniquesIncrement = isUniqueVisitor ? 1 : 0;
 
-      if (pageviewsIncrement > 0 || visitsIncrement > 0 || uniquesIncrement > 0) {
+      if (
+        pageviewsIncrement > 0 ||
+        visitsIncrement > 0 ||
+        uniquesIncrement > 0
+      ) {
         await tx.eventDaily.upsert({
           where: {
             websiteId_date: {

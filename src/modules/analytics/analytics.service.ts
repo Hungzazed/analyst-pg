@@ -32,7 +32,11 @@ type SessionPoint = {
 export class AnalyticsService {
   constructor(private readonly prismaService: PrismaService) {}
 
-  async getOverview(userId: string, websiteId: string, query: AnalyticsQueryDto) {
+  async getOverview(
+    userId: string,
+    websiteId: string,
+    query: AnalyticsQueryDto,
+  ) {
     const website = await this.assertWebsiteOwnership(userId, websiteId);
     const range = this.resolveRange(query);
 
@@ -106,7 +110,8 @@ export class AnalyticsService {
       },
     );
 
-    const averageSessionDurationMs = this.calculateAverageSessionDuration(sessions);
+    const averageSessionDurationMs =
+      this.calculateAverageSessionDuration(sessions);
 
     return {
       website,
@@ -114,7 +119,9 @@ export class AnalyticsService {
       summary: {
         ...summary,
         averageSessionDurationMs,
-        averageSessionDurationSeconds: Math.round(averageSessionDurationMs / 1000),
+        averageSessionDurationSeconds: Math.round(
+          averageSessionDurationMs / 1000,
+        ),
         pageviewCount,
         uniquePages: uniqueUrls.length,
       },
@@ -127,7 +134,11 @@ export class AnalyticsService {
     };
   }
 
-  async getTopPages(userId: string, websiteId: string, query: AnalyticsQueryDto) {
+  async getTopPages(
+    userId: string,
+    websiteId: string,
+    query: AnalyticsQueryDto,
+  ) {
     await this.assertWebsiteOwnership(userId, websiteId);
     const range = this.resolveRange(query);
     const limit = query.limit ?? 10;
@@ -160,7 +171,11 @@ export class AnalyticsService {
     };
   }
 
-  async getTrafficSources(userId: string, websiteId: string, query: AnalyticsQueryDto) {
+  async getTrafficSources(
+    userId: string,
+    websiteId: string,
+    query: AnalyticsQueryDto,
+  ) {
     const website = await this.assertWebsiteOwnership(userId, websiteId);
     const range = this.resolveRange(query);
     const limit = query.limit ?? 10;
@@ -193,7 +208,11 @@ export class AnalyticsService {
     };
   }
 
-  async getBehavior(userId: string, websiteId: string, query: AnalyticsQueryDto) {
+  async getBehavior(
+    userId: string,
+    websiteId: string,
+    query: AnalyticsQueryDto,
+  ) {
     await this.assertWebsiteOwnership(userId, websiteId);
     const range = this.resolveRange(query);
     const sessionLimit = query.sessionLimit ?? 10;
@@ -264,7 +283,10 @@ export class AnalyticsService {
     for (const session of journeys) {
       for (let index = 0; index < session.pages.length - 1; index += 1) {
         const transition = `${session.pages[index]} -> ${session.pages[index + 1]}`;
-        transitionCounts.set(transition, (transitionCounts.get(transition) ?? 0) + 1);
+        transitionCounts.set(
+          transition,
+          (transitionCounts.get(transition) ?? 0) + 1,
+        );
       }
     }
 
@@ -276,7 +298,11 @@ export class AnalyticsService {
     };
   }
 
-  async getDeviceAnalytics(userId: string, websiteId: string, query: AnalyticsQueryDto) {
+  async getDeviceAnalytics(
+    userId: string,
+    websiteId: string,
+    query: AnalyticsQueryDto,
+  ) {
     await this.assertWebsiteOwnership(userId, websiteId);
     const range = this.resolveRange(query);
     const sessions = await this.fetchSessions(websiteId, range);
@@ -309,7 +335,11 @@ export class AnalyticsService {
     };
   }
 
-  async getGeoAnalytics(userId: string, websiteId: string, query: AnalyticsQueryDto) {
+  async getGeoAnalytics(
+    userId: string,
+    websiteId: string,
+    query: AnalyticsQueryDto,
+  ) {
     await this.assertWebsiteOwnership(userId, websiteId);
     const range = this.resolveRange(query);
     const sessions = await this.fetchSessions(websiteId, range);
@@ -421,7 +451,9 @@ export class AnalyticsService {
       landingCount += 1;
 
       const nextIndex = nextTarget
-        ? pageviews.findIndex((page, index) => index > landingIndex && page === nextTarget)
+        ? pageviews.findIndex(
+            (page, index) => index > landingIndex && page === nextTarget,
+          )
         : landingIndex + 1;
 
       if (nextIndex < 0 || nextIndex >= pageviews.length) {
@@ -490,13 +522,18 @@ export class AnalyticsService {
     }
 
     if (website.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to access this website');
+      throw new ForbiddenException(
+        'You do not have permission to access this website',
+      );
     }
 
     return website;
   }
 
-  private async fetchPageviewEvents(websiteId: string, range: { from: Date; to: Date }) {
+  private async fetchPageviewEvents(
+    websiteId: string,
+    range: { from: Date; to: Date },
+  ) {
     return this.prismaService.event.findMany({
       where: {
         websiteId,
@@ -516,7 +553,10 @@ export class AnalyticsService {
     });
   }
 
-  private async fetchEvents(websiteId: string, range: { from: Date; to: Date }) {
+  private async fetchEvents(
+    websiteId: string,
+    range: { from: Date; to: Date },
+  ) {
     return this.prismaService.event.findMany({
       where: {
         websiteId,
@@ -544,7 +584,10 @@ export class AnalyticsService {
     });
   }
 
-  private async fetchSessions(websiteId: string, range: { from: Date; to: Date }) {
+  private async fetchSessions(
+    websiteId: string,
+    range: { from: Date; to: Date },
+  ) {
     return this.prismaService.session.findMany({
       where: {
         websiteId,
@@ -599,7 +642,8 @@ export class AnalyticsService {
 
     const totalDuration = sessions.reduce(
       (accumulator, session) =>
-        accumulator + Math.max(0, session.lastSeenAt.getTime() - session.createdAt.getTime()),
+        accumulator +
+        Math.max(0, session.lastSeenAt.getTime() - session.createdAt.getTime()),
       0,
     );
 
@@ -627,7 +671,10 @@ export class AnalyticsService {
     metadata: unknown,
     websiteDomain: string,
   ) {
-    const utmSource = this.readMetadataString(metadata, ['utm_source', 'source']);
+    const utmSource = this.readMetadataString(metadata, [
+      'utm_source',
+      'source',
+    ]);
     if (utmSource) {
       return utmSource;
     }
@@ -637,8 +684,12 @@ export class AnalyticsService {
     }
 
     try {
-      const host = new URL(referrer).hostname.replace(/^www\./i, '').toLowerCase();
-      const normalizedWebsiteDomain = websiteDomain.replace(/^www\./i, '').toLowerCase();
+      const host = new URL(referrer).hostname
+        .replace(/^www\./i, '')
+        .toLowerCase();
+      const normalizedWebsiteDomain = websiteDomain
+        .replace(/^www\./i, '')
+        .toLowerCase();
 
       if (host === normalizedWebsiteDomain) {
         return 'internal';
@@ -653,7 +704,11 @@ export class AnalyticsService {
   private normalizeDevice(device: string | null) {
     const label = this.normalizeLabel(device).toLowerCase();
 
-    if (label.includes('mobile') || label.includes('phone') || label.includes('tablet')) {
+    if (
+      label.includes('mobile') ||
+      label.includes('phone') ||
+      label.includes('tablet')
+    ) {
       return 'mobile';
     }
 
@@ -706,7 +761,11 @@ export class AnalyticsService {
 
       if (typeof value === 'string') {
         const normalized = value.trim().toLowerCase();
-        if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+        if (
+          normalized === 'true' ||
+          normalized === '1' ||
+          normalized === 'yes'
+        ) {
           return true;
         }
       }
@@ -718,7 +777,10 @@ export class AnalyticsService {
   private toSortedRows(counts: Map<string, number>) {
     return Array.from(counts.entries())
       .map(([value, count]) => ({ value, count }))
-      .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
+      .sort(
+        (left, right) =>
+          right.count - left.count || left.value.localeCompare(right.value),
+      );
   }
 
   private buildMobileVsDesktop(counts: Map<string, number>, total: number) {

@@ -51,7 +51,10 @@ export class WebsiteController {
   @Post()
   @ApiOperation({ summary: 'Create a new website' })
   @ApiOkResponse({ description: 'Website created successfully' })
-  create(@CurrentUser() user: AuthUser, @Body() createWebsiteDto: CreateWebsiteDto) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() createWebsiteDto: CreateWebsiteDto,
+  ) {
     return this.websiteService.create(user.id, createWebsiteDto);
   }
 
