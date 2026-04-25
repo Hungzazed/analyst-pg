@@ -26,15 +26,19 @@ export interface RegisterResponse {
 
 export interface AuthResponse {
   accessToken: string;
-  refreshToken: string;
-  tokenType: 'Bearer';
   user: AuthUserProfile;
 }
 
 export interface RefreshResponse {
   accessToken: string;
+}
+
+export interface LoginResult extends AuthResponse {
   refreshToken: string;
-  tokenType: 'Bearer';
+}
+
+export interface RefreshResult extends RefreshResponse {
+  refreshToken: string;
 }
 
 @Injectable()
@@ -79,7 +83,7 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto): Promise<AuthResponse> {
+  async login(loginDto: LoginDto): Promise<LoginResult> {
     const user = await this.prismaService.user.findUnique({
       where: { email: loginDto.email },
     });
@@ -108,7 +112,6 @@ export class AuthService {
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      tokenType: 'Bearer',
       user: {
         id: user.id,
         email: user.email,
@@ -119,7 +122,7 @@ export class AuthService {
     };
   }
 
-  async refresh(refreshToken: string): Promise<RefreshResponse> {
+  async refresh(refreshToken: string): Promise<RefreshResult> {
     const payload = await this.jwtStrategy.verifyRefreshToken(refreshToken);
 
     const user = await this.prismaService.user.findUnique({
@@ -182,7 +185,6 @@ export class AuthService {
     return {
       accessToken: newTokens.accessToken,
       refreshToken: newTokens.refreshToken,
-      tokenType: 'Bearer',
     };
   }
 

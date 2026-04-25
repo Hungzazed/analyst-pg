@@ -4,6 +4,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, INestApplication, Un
 import { Test } from '@nestjs/testing';
 import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { Reflector } from '@nestjs/core';
 import { AuthController } from '../src/modules/auth/auth.controller';
@@ -36,6 +37,15 @@ type PrismaMock = {
 		deleteMany: JestMock;
 	};
 	$transaction: JestMock;
+};
+
+const getSetCookie = (response: request.Response): string[] => {
+	const cookies = response.headers['set-cookie'];
+	if (!cookies) {
+		return [];
+	}
+
+	return Array.isArray(cookies) ? cookies : [cookies];
 };
 
 class MockJwtStrategy {
@@ -142,6 +152,7 @@ describe('Auth API', () => {
 				transform: true,
 			}),
 		);
+		app.use(cookieParser());
 		app.useGlobalFilters(new HttpExceptionFilter());
 		app.useGlobalInterceptors(new ResponseInterceptor());
 
@@ -267,7 +278,7 @@ describe('Auth API', () => {
 		expect(response.body.message).toBe('Email already exists');
 	});
 
-	it('logs in successfully and stores a hashed refresh token', async () => {
+	it('logs in successfully, stores hashed refresh token, and sets refresh cookie', async () => {
 		const rawPassword = 'Password123';
 		const storedPassword = await bcrypt.hash(rawPassword, 10);
 		const refreshToken = 'refresh-token-login-12345';
@@ -291,15 +302,21 @@ describe('Auth API', () => {
 		expect(response.body.success).toBe(true);
 		expect(response.body.data).toMatchObject({
 			accessToken: 'access-token-login',
-			refreshToken,
-			tokenType: 'Bearer',
 			user: {
 				id: user.id,
 				email: user.email,
 				role: user.role,
 			},
 		});
+		expect(response.body.data.refreshToken).toBeUndefined();
+		expect(response.body.data.tokenType).toBeUndefined();
 		expect(response.body.data.user.password).toBeUndefined();
+
+		const setCookies = getSetCookie(response);
+		expect(setCookies.some((cookie) => cookie.startsWith(`refreshToken=${refreshToken};`))).toBe(true);
+		expect(setCookies.some((cookie) => cookie.includes('HttpOnly'))).toBe(true);
+		expect(setCookies.some((cookie) => cookie.includes('Path=/auth'))).toBe(true);
+		expect(setCookies.some((cookie) => cookie.includes('Max-Age='))).toBe(true);
 
 		const createCall = prismaMock.refreshToken.create.mock.calls[0][0];
 		expect(createCall.data.userId).toBe(user.id);
@@ -376,15 +393,18 @@ describe('Auth API', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/auth/refresh')
-			.send({ refreshToken: rawRefreshToken })
+			.set('Cookie', [`refreshToken=${rawRefreshToken}`])
 			.expect(201);
 
 		expect(response.body.success).toBe(true);
 		expect(response.body.data).toMatchObject({
 			accessToken: 'access-token-refreshed',
-			refreshToken: 'refresh-token-rotated',
-			tokenType: 'Bearer',
 		});
+		expect(response.body.data.refreshToken).toBeUndefined();
+		expect(response.body.data.tokenType).toBeUndefined();
+
+		const setCookies = getSetCookie(response);
+		expect(setCookies.some((cookie) => cookie.startsWith('refreshToken=refresh-token-rotated;'))).toBe(true);
 		expect(prismaMock.refreshToken.delete).toHaveBeenCalledWith({
 			where: { id: 'session-old' },
 		});
@@ -401,7 +421,7 @@ describe('Auth API', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/auth/refresh')
-			.send({ refreshToken: 'invalid-refresh-token' })
+			.set('Cookie', ['refreshToken=invalid-refresh-token'])
 			.expect(403);
 
 		expect(response.body.success).toBe(false);
@@ -419,7 +439,7 @@ describe('Auth API', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/auth/refresh')
-			.send({ refreshToken: 'refresh-token-12345' })
+			.set('Cookie', ['refreshToken=refresh-token-12345'])
 			.expect(404);
 
 		expect(response.body.success).toBe(false);
@@ -438,7 +458,7 @@ describe('Auth API', () => {
 
 		const response = await request(app.getHttpServer())
 			.post('/auth/refresh')
-			.send({ refreshToken: 'refresh-token-12345' })
+			.set('Cookie', ['refreshToken=refresh-token-12345'])
 			.expect(403);
 
 		expect(response.body.success).toBe(false);
@@ -461,11 +481,13 @@ describe('Auth API', () => {
 		const response = await request(app.getHttpServer())
 			.post('/auth/logout')
 			.set('Authorization', 'Bearer valid-user-access-token')
-			.send({ refreshToken: rawRefreshToken })
+			.set('Cookie', [`refreshToken=${rawRefreshToken}`])
 			.expect(201);
 
 		expect(response.body.success).toBe(true);
 		expect(response.body.data.message).toBe('Logged out successfully');
+		const setCookies = getSetCookie(response);
+		expect(setCookies.some((cookie) => cookie.startsWith('refreshToken=;'))).toBe(true);
 		expect(prismaMock.refreshToken.delete).toHaveBeenCalledWith({
 			where: { id: 'session-logout' },
 		});
@@ -475,11 +497,12 @@ describe('Auth API', () => {
 		const response = await request(app.getHttpServer())
 			.post('/auth/logout')
 			.set('Authorization', 'Bearer valid-user-access-token')
-			.send({})
 			.expect(201);
 
 		expect(response.body.success).toBe(true);
 		expect(response.body.data.message).toBe('Logged out successfully');
+		const setCookies = getSetCookie(response);
+		expect(setCookies.some((cookie) => cookie.startsWith('refreshToken=;'))).toBe(true);
 		expect(prismaMock.refreshToken.deleteMany).toHaveBeenCalledWith({
 			where: { userId: 'user-1' },
 		});
@@ -491,11 +514,21 @@ describe('Auth API', () => {
 		const response = await request(app.getHttpServer())
 			.post('/auth/logout')
 			.set('Authorization', 'Bearer valid-user-access-token')
-			.send({ refreshToken: 'invalid-refresh-token' })
+			.set('Cookie', ['refreshToken=invalid-refresh-token'])
 			.expect(403);
 
 		expect(response.body.success).toBe(false);
 		expect(response.body.message).toBe('Invalid refresh token');
+	});
+
+	it('rejects refresh when cookie is missing', async () => {
+		const response = await request(app.getHttpServer())
+			.post('/auth/refresh')
+			.expect(403);
+
+		expect(response.body.success).toBe(false);
+		expect(response.body.message).toBe('Invalid refresh token');
+		expect(jwtStrategyMock.verifyRefreshToken).not.toHaveBeenCalled();
 	});
 
 	it('returns current profile when access token is valid', async () => {
