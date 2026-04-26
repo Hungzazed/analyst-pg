@@ -268,6 +268,10 @@ export class MetricsKafkaConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private parseUnixTimestamp(timestamp: number): Date {
+    if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+      throw new Error('Invalid event timestamp in Kafka message');
+    }
+
     const millis = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
     const date = new Date(millis);
 
