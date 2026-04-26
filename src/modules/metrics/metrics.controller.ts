@@ -46,15 +46,17 @@ export class MetricsController {
     const forwardedIp = Array.isArray(forwarded)
       ? forwarded[0]
       : forwarded?.split(',')[0]?.trim();
-    const userAgent = request.headers['user-agent'];
+    const userAgent = request.get('user-agent');
+    const origin = request.get('origin');
+    const referer = request.get('referer');
 
     return this.metricsService.ingestEvent({
       apiKey,
       dto: ingestMetricDto,
-      ip: ingestMetricDto.ip ?? forwardedIp ?? request.ip,
-      userAgent:
-        ingestMetricDto.userAgent ??
-        (Array.isArray(userAgent) ? userAgent[0] : userAgent),
+      origin,
+      referer,
+      ip: forwardedIp ?? request.ip,
+      userAgent,
     });
   }
 }
