@@ -7,7 +7,6 @@ import { AuthModule } from './modules/auth';
 import { MetricsModule } from './modules/metrics';
 import { WebsiteModule } from './modules/website';
 import {
-  KafkaModule,
   RedisModule,
   PostgresModule,
   PrismaModule,
@@ -19,7 +18,6 @@ import {
       isGlobal: true,
       envFilePath: '.env',
     }),
-    KafkaModule,
     RedisModule,
     PostgresModule,
     PrismaModule,

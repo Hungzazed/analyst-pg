@@ -4,10 +4,9 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { EventType } from '@prisma/client';
+import { EventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
-import { MetricsKafkaProducer } from './kafka/metrics-kafka.producer';
 
 interface IngestEventInput {
   apiKey: string;
@@ -18,12 +17,28 @@ interface IngestEventInput {
   userAgent?: string;
 }
 
+interface MetricsEventMessage {
+  eventId: string;
+  websiteId: string;
+  externalSessionId?: string;
+  type: EventType;
+  timestamp: number;
+  url?: string;
+  title?: string;
+  referrer?: string;
+  ip?: string;
+  userAgent?: string;
+  userId?: string;
+  country?: string;
+  device?: string;
+  browser?: string;
+  os?: string;
+  metadata?: Record<string, unknown>;
+}
+
 @Injectable()
 export class MetricsService {
-  constructor(
-    private readonly prismaService: PrismaService,
-    private readonly metricsKafkaProducer: MetricsKafkaProducer,
-  ) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   async ingestEvent(input: IngestEventInput) {
     const apiKey = this.normalize(input.apiKey);
@@ -69,7 +84,7 @@ export class MetricsService {
     const occurredAt = this.parseUnixTimestamp(input.dto.timestamp);
     const externalSessionId = this.normalize(input.dto.sessionId, 128);
 
-    await this.metricsKafkaProducer.enqueue({
+    const message: MetricsEventMessage = {
       eventId: externalEventId,
       websiteId: websiteApiKey.websiteId,
       externalSessionId,
@@ -86,15 +101,208 @@ export class MetricsService {
       browser: this.normalize(input.dto.browser, 128),
       os: this.normalize(input.dto.os, 128),
       metadata: input.dto.metadata,
-    });
+    };
+
+    await this.persistEvent(message);
 
     return {
       accepted: true,
-      queued: true,
+      queued: false,
       externalEventId,
       websiteId: websiteApiKey.websiteId,
       occurredAt,
     };
+  }
+
+  private async persistEvent(message: MetricsEventMessage): Promise<void> {
+    const occurredAt = this.parseUnixTimestamp(message.timestamp);
+    const dayStart = this.getUtcDayStart(occurredAt);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    const ip = this.normalize(message.ip, 64);
+    const userAgent = this.normalize(message.userAgent, 512);
+    const country = this.normalize(message.country, 64);
+    const device = this.normalize(message.device, 128);
+    const browser = this.normalize(message.browser, 128);
+    const os = this.normalize(message.os, 128);
+    const url = this.normalize(message.url, 2048);
+    const referrer = this.normalize(message.referrer, 2048);
+    const title = this.normalize(message.title, 255);
+    const externalSessionId = this.normalize(message.externalSessionId, 128);
+    const userId = this.normalize(message.userId, 255);
+    const metadata = message.metadata
+      ? (message.metadata as Prisma.InputJsonValue)
+      : undefined;
+
+    await this.prismaService.$transaction(async (tx) => {
+      const existingEvent = await tx.event.findFirst({
+        where: {
+          websiteId: message.websiteId,
+          eventId: message.eventId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (existingEvent) {
+        return;
+      }
+
+      let sessionId: string | undefined;
+      let isNewSession = false;
+      let isUniqueVisitor = false;
+
+      if (externalSessionId) {
+        const existingSession = await tx.session.findFirst({
+          where: {
+            websiteId: message.websiteId,
+            externalSessionId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (existingSession) {
+          sessionId = existingSession.id;
+          await tx.session.update({
+            where: { id: sessionId },
+            data: {
+              userId,
+              ip,
+              userAgent,
+              country,
+              device,
+              browser,
+              os,
+            },
+          });
+        }
+      }
+
+      if (!sessionId) {
+        isNewSession = true;
+
+        if (externalSessionId) {
+          isUniqueVisitor = true;
+        } else if (ip) {
+          const seenToday = await tx.session.findFirst({
+            where: {
+              websiteId: message.websiteId,
+              ip,
+              createdAt: {
+                gte: dayStart,
+                lt: dayEnd,
+              },
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          isUniqueVisitor = !seenToday;
+        } else {
+          isUniqueVisitor = true;
+        }
+
+        const createdSession = await tx.session.create({
+          data: {
+            websiteId: message.websiteId,
+            externalSessionId,
+            userId,
+            ip,
+            userAgent,
+            country,
+            device,
+            browser,
+            os,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        sessionId = createdSession.id;
+      }
+
+      await tx.event.create({
+        data: {
+          websiteId: message.websiteId,
+          sessionId,
+          eventId: message.eventId,
+          userId,
+          type: message.type,
+          title,
+          url,
+          referrer,
+          userAgent,
+          ip,
+          country,
+          device,
+          browser,
+          os,
+          metadata,
+          occurredAt,
+        },
+      });
+
+      const pageviewsIncrement = message.type === EventType.PAGEVIEW ? 1 : 0;
+      const visitsIncrement = isNewSession ? 1 : 0;
+      const uniquesIncrement = isUniqueVisitor ? 1 : 0;
+
+      if (
+        pageviewsIncrement === 0 &&
+        visitsIncrement === 0 &&
+        uniquesIncrement === 0
+      ) {
+        return;
+      }
+
+      await tx.eventDaily.upsert({
+        where: {
+          websiteId_date: {
+            websiteId: message.websiteId,
+            date: dayStart,
+          },
+        },
+        update: {
+          pageviews: {
+            increment: pageviewsIncrement,
+          },
+          visits: {
+            increment: visitsIncrement,
+          },
+          uniques: {
+            increment: uniquesIncrement,
+          },
+        },
+        create: {
+          websiteId: message.websiteId,
+          date: dayStart,
+          pageviews: pageviewsIncrement,
+          visits: visitsIncrement,
+          uniques: uniquesIncrement,
+        },
+      });
+    });
+  }
+
+  private getUtcDayStart(date: Date): Date {
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+  }
+
+  private isDuplicateEventError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002' &&
+      Array.isArray(error.meta?.target) &&
+      error.meta.target.includes('websiteId') &&
+      error.meta.target.includes('eventId')
+    );
   }
 
   private normalize(value?: string | null, maxLen = 255): string | undefined {
