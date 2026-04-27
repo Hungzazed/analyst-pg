@@ -4,6 +4,7 @@ import {
   Param,
   ParseUUIDPipe,
   Query,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -18,6 +19,8 @@ import type { AuthUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { FunnelQueryDto } from './dto/funnel-query.dto';
+import { RealtimeQueryDto } from './dto/realtime-query.dto';
+import { RetentionQueryDto } from './dto/retention-query.dto';
 import { AnalyticsService } from './analytics.service';
 
 @Controller('analytics')
@@ -37,6 +40,18 @@ export class AnalyticsController {
     @Query() query: AnalyticsQueryDto,
   ) {
     return this.analyticsService.getOverview(user.id, websiteId, query);
+  }
+
+  @Get(':websiteId/events')
+  @ApiOperation({ summary: 'Get custom events breakdown' })
+  @ApiParam({ name: 'websiteId', format: 'uuid' })
+  @ApiOkResponse({ description: 'Custom events fetched successfully' })
+  getEvents(
+    @CurrentUser() user: AuthUser,
+    @Param('websiteId', new ParseUUIDPipe()) websiteId: string,
+    @Query() query: AnalyticsQueryDto,
+  ) {
+    return this.analyticsService.getEvents(user.id, websiteId, query);
   }
 
   @Get(':websiteId/top-pages')
@@ -75,6 +90,30 @@ export class AnalyticsController {
     return this.analyticsService.getBehavior(user.id, websiteId, query);
   }
 
+  @Get(':websiteId/realtime')
+  @ApiOperation({ summary: 'Get realtime analytics snapshot' })
+  @ApiParam({ name: 'websiteId', format: 'uuid' })
+  @ApiOkResponse({ description: 'Realtime analytics fetched successfully' })
+  getRealtime(
+    @CurrentUser() user: AuthUser,
+    @Param('websiteId', new ParseUUIDPipe()) websiteId: string,
+    @Query() query: RealtimeQueryDto,
+  ) {
+    return this.analyticsService.getRealtime(user.id, websiteId, query);
+  }
+
+  @Sse(':websiteId/realtime/stream')
+  @ApiOperation({ summary: 'Stream realtime analytics via SSE' })
+  @ApiParam({ name: 'websiteId', format: 'uuid' })
+  @ApiOkResponse({ description: 'Realtime SSE stream started successfully' })
+  streamRealtime(
+    @CurrentUser() user: AuthUser,
+    @Param('websiteId', new ParseUUIDPipe()) websiteId: string,
+    @Query() query: RealtimeQueryDto,
+  ) {
+    return this.analyticsService.streamRealtime(user.id, websiteId, query);
+  }
+
   @Get(':websiteId/devices')
   @ApiOperation({ summary: 'Get device analytics' })
   @ApiParam({ name: 'websiteId', format: 'uuid' })
@@ -97,6 +136,18 @@ export class AnalyticsController {
     @Query() query: AnalyticsQueryDto,
   ) {
     return this.analyticsService.getGeoAnalytics(user.id, websiteId, query);
+  }
+
+  @Get(':websiteId/retention')
+  @ApiOperation({ summary: 'Get cohort retention analytics' })
+  @ApiParam({ name: 'websiteId', format: 'uuid' })
+  @ApiOkResponse({ description: 'Retention analytics fetched successfully' })
+  getRetention(
+    @CurrentUser() user: AuthUser,
+    @Param('websiteId', new ParseUUIDPipe()) websiteId: string,
+    @Query() query: RetentionQueryDto,
+  ) {
+    return this.analyticsService.getRetention(user.id, websiteId, query);
   }
 
   @Get(':websiteId/funnel')

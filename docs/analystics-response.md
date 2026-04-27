@@ -1,10 +1,10 @@
 # Analystics Module - Response Data
 
-Tai lieu nay mo ta du lieu tra ve cua cac endpoint trong module analystics.
+Tai lieu nay mo ta response moi nhat cua cac endpoint trong module analystics.
 
 ## 1) Response envelope chung
 
-Tat ca endpoint deu di qua ResponseInterceptor, nen response HTTP thanh cong co dang:
+Tat ca endpoint deu di qua ResponseInterceptor, nen response thanh cong co dang:
 
 ```json
 {
@@ -17,7 +17,7 @@ Tat ca endpoint deu di qua ResponseInterceptor, nen response HTTP thanh cong co 
 }
 ```
 
-Phan du lieu ben duoi tap trung vao truong data.
+Phan ben duoi chi mo ta du lieu trong `data`.
 
 ## 2) GET /analytics/:websiteId/overview
 
@@ -35,13 +35,22 @@ Phan du lieu ben duoi tap trung vao truong data.
     "from": "2026-04-01T00:00:00.000Z",
     "to": "2026-04-30T23:59:59.999Z"
   },
+  "previousRange": {
+    "from": "2026-03-02T00:00:00.000Z",
+    "to": "2026-04-01T00:00:00.000Z"
+  },
   "summary": {
     "pageviews": 1200,
+    "pageviewsChange": 12.5,
     "sessions": 430,
+    "sessionsChange": -3.2,
     "uniqueVisitors": 300,
+    "uniqueVisitorsChange": 8,
+    "bounceRate": 0.42,
+    "bounceRateChange": -2.1,
     "averageSessionDurationMs": 75231,
+    "averageSessionDurationMsChange": 5.3,
     "averageSessionDurationSeconds": 75,
-    "pageviewCount": 1200,
     "uniquePages": 52
   },
   "daily": [
@@ -49,13 +58,19 @@ Phan du lieu ben duoi tap trung vao truong data.
       "date": "2026-04-01T00:00:00.000Z",
       "pageviews": 120,
       "sessions": 48,
-      "uniqueVisitors": 36
+      "uniqueVisitors": 36,
+      "bounceRate": 0.38
     }
   ]
 }
 ```
 
-## 3) GET /analytics/:websiteId/top-pages
+Ghi chu:
+- `previousRange` la khoang so sanh ngay truoc do, co cung do dai voi `range`.
+- `*Change` la phan tram thay doi so voi ky truoc.
+- `bounceRate` va `bounceRateChange` dang la so thap phan.
+
+## 3) GET /analytics/:websiteId/events
 
 ### data
 
@@ -65,27 +80,77 @@ Phan du lieu ben duoi tap trung vao truong data.
     "from": "2026-04-01T00:00:00.000Z",
     "to": "2026-04-30T23:59:59.999Z"
   },
-  "total": 1200,
-  "pages": [
+  "total": 240,
+  "events": [
     {
-      "value": "/",
-      "count": 500,
-      "share": 0.4166666667
+      "value": "click",
+      "type": "CLICK",
+      "count": 160,
+      "share": 0.6666666667,
+      "metadataBreakdownTotal": 160,
+      "metadataBreakdownLimit": 5,
+      "metadataBreakdown": [
+        {
+          "key": "label",
+          "value": "cta",
+          "count": 90,
+          "share": 0.5625
+        }
+      ]
     },
     {
-      "value": "/pricing",
-      "count": 230,
-      "share": 0.1916666667
+      "value": "form_submit",
+      "type": "CUSTOM",
+      "count": 80,
+      "share": 0.3333333333,
+      "metadataBreakdownTotal": 80,
+      "metadataBreakdownLimit": 5,
+      "metadataBreakdown": []
     }
   ]
 }
 ```
 
 Ghi chu:
-- share la ti le trong khoang [0, 1].
-- value la normalized page path.
+- Endpoint nay lay tat ca custom events, khong tinh PAGEVIEW.
+- `value` duoc rut ra tu metadata neu co `eventName`, `name`, `action`, `label`, `event`, hoac fallback ve ten `type`.
+- `metadataBreakdown` la top metadata keys/value phu tro trong moi event group.
 
-## 4) GET /analytics/:websiteId/traffic-sources
+## 4) GET /analytics/:websiteId/top-pages
+
+### data
+
+```json
+{
+  "website": {
+    "id": "uuid",
+    "name": "My Website",
+    "domain": "example.com",
+    "userId": "uuid"
+  },
+  "range": {
+    "from": "2026-04-01T00:00:00.000Z",
+    "to": "2026-04-30T23:59:59.999Z"
+  },
+  "total": 1200,
+  "pages": [
+    {
+      "value": "/",
+      "count": 500,
+      "share": 0.4166666667,
+      "avgTimeOnPageMs": 45000,
+      "bounceRate": 0.38,
+      "exitRate": 0.22
+    }
+  ]
+}
+```
+
+Ghi chu:
+- `bounceRate` va `exitRate` la so thap phan.
+- `avgTimeOnPageMs` tinh theo pageview lien tiep trong cung session.
+
+## 5) GET /analytics/:websiteId/traffic-sources
 
 ### data
 
@@ -98,17 +163,26 @@ Ghi chu:
   "total": 1200,
   "sources": [
     {
-      "value": "google.com",
+      "value": "google",
+      "source": "google",
+      "medium": "cpc",
+      "campaign": "spring_sale",
       "count": 420,
       "share": 0.35
     },
     {
       "value": "direct",
+      "source": "direct",
+      "medium": null,
+      "campaign": null,
       "count": 300,
       "share": 0.25
     },
     {
       "value": "internal",
+      "source": "internal",
+      "medium": "internal",
+      "campaign": null,
       "count": 90,
       "share": 0.075
     }
@@ -117,9 +191,10 @@ Ghi chu:
 ```
 
 Ghi chu:
-- source co the la ten host, utm_source, direct, hoac internal.
+- `value` van duoc giu lai de backward-compatible.
+- Neu co UTM, `source`/`medium`/`campaign` duoc tach rieng.
 
-## 5) GET /analytics/:websiteId/behavior
+## 6) GET /analytics/:websiteId/behavior
 
 ### data
 
@@ -129,6 +204,8 @@ Ghi chu:
     "from": "2026-04-01T00:00:00.000Z",
     "to": "2026-04-30T23:59:59.999Z"
   },
+  "journeysTotal": 430,
+  "journeysLimit": 50,
   "journeys": [
     {
       "sessionId": "uuid",
@@ -139,25 +216,104 @@ Ghi chu:
       "durationMs": 180000
     }
   ],
-  "transitions": [
+  "topEntryPages": [
     {
-      "value": "/ -> /pricing",
-      "count": 120
-    },
-    {
-      "value": "/pricing -> /checkout",
-      "count": 70
+      "value": "/",
+      "count": 180
     }
   ],
+  "topExitPages": [
+    {
+      "value": "/checkout",
+      "count": 90
+    }
+  ],
+  "avgPagesPerSession": 2.8,
+  "transitions": {
+    "total": 340,
+    "items": [
+      {
+        "value": "/ -> /pricing",
+        "count": 120
+      },
+      {
+        "value": "/pricing -> /checkout",
+        "count": 70
+      }
+    ]
+  },
   "averageSessionDurationMs": 75231
 }
 ```
 
 Ghi chu:
-- journeys da loc cac session co it nhat 1 pageview.
-- transitions la top transitions, toi da 20 phan tu.
+- `journeys` chi gom session co it nhat 1 pageview.
+- `transitions.total` la tong so transition cua toan bo range, con `items` la top transitions.
 
-## 6) GET /analytics/:websiteId/devices
+## 7) GET /analytics/:websiteId/realtime
+
+### data
+
+```json
+{
+  "range": {
+    "from": "2026-04-27T09:00:00.000Z",
+    "to": "2026-04-27T09:05:00.000Z"
+  },
+  "windowMinutes": 5,
+  "onlineUsers": 12,
+  "activeSessionsLimit": 50,
+  "activeSessions": [
+    {
+      "sessionId": "uuid",
+      "currentPage": "/pricing",
+      "lastSeenAt": "2026-04-27T09:04:31.000Z",
+      "country": "Vietnam",
+      "device": "desktop",
+      "browser": "Chrome",
+      "os": "Windows"
+    }
+  ],
+  "currentPages": [
+    {
+      "value": "/pricing",
+      "count": 5
+    }
+  ],
+  "totalActivePages": 3
+}
+```
+
+Ghi chu:
+- `windowMinutes` la cua so hoat dong gan nhat de tinh realtime.
+- `activeSessions` la danh sach session con active trong cua so nay.
+- `activeSessionsLimit` la gioi han session duoc tra ve.
+- `totalActivePages` la tong so trang dang co nguoi online.
+
+## 8) GET /analytics/:websiteId/realtime/stream
+
+### SSE stream
+
+Endpoint nay tra ve SSE va push event theo nhan `snapshot`.
+
+Mo hinh payload moi lan push giong het response cua `GET /analytics/:websiteId/realtime`:
+
+```json
+{
+  "range": {
+    "from": "2026-04-27T09:00:00.000Z",
+    "to": "2026-04-27T09:05:00.000Z"
+  },
+  "windowMinutes": 5,
+  "onlineUsers": 12,
+  "activeSessionsLimit": 50,
+  "activeSessions": [],
+  "currentPages": [],
+  "totalActivePages": 0
+}
+```
+
+## 9) GET /analytics/:websiteId/devices
 
 ### data
 
@@ -190,11 +346,13 @@ Ghi chu:
       "value": "Chrome",
       "count": 300,
       "share": 0.6976744186
-    },
+    }
+  ],
+  "osUsage": [
     {
-      "value": "Safari",
-      "count": 90,
-      "share": 0.2093023256
+      "value": "Windows",
+      "count": 180,
+      "share": 0.4186046512
     }
   ],
   "mobileVsDesktop": [
@@ -217,7 +375,7 @@ Ghi chu:
 }
 ```
 
-## 7) GET /analytics/:websiteId/geo
+## 10) GET /analytics/:websiteId/geo
 
 ### data
 
@@ -233,22 +391,69 @@ Ghi chu:
       "value": "Vietnam",
       "count": 220,
       "share": 0.511627907
-    },
+    }
+  ],
+  "cities": [
     {
-      "value": "Japan",
-      "count": 80,
-      "share": 0.1860465116
+      "value": "Ho Chi Minh City",
+      "country": "Vietnam",
+      "count": 140,
+      "share": 0.325,
+      "shareOfTotal": 0.325,
+      "shareOfCountry": 0.636
     },
     {
       "value": "unknown",
-      "count": 15,
-      "share": 0.0348837209
+      "country": "Vietnam",
+      "count": 80,
+      "share": 0.186,
+      "shareOfTotal": 0.186,
+      "shareOfCountry": 0.364
     }
   ]
 }
 ```
 
-## 8) GET /analytics/:websiteId/funnel
+## 11) GET /analytics/:websiteId/retention
+
+### data
+
+```json
+{
+  "range": {
+    "from": "2026-04-01T00:00:00.000Z",
+    "to": "2026-04-30T23:59:59.999Z"
+  },
+  "granularity": "day",
+  "periods": 7,
+  "cohorts": [
+    {
+      "cohortStart": "2026-04-01T00:00:00.000Z",
+      "cohortEnd": "2026-04-01T23:59:59.999Z",
+      "users": 120,
+      "retention": [
+        {
+          "period": 0,
+          "count": 120,
+          "rate": 1
+        },
+        {
+          "period": 1,
+          "count": 48,
+          "rate": 0.4
+        }
+      ]
+    }
+  ]
+}
+```
+
+Ghi chu:
+- `granularity` co the la `day` hoac `week`.
+- `periods` quyet dinh so cot retention tra ve.
+- `period = 0` luon la baseline cohort, vi vay `rate` luon = 1.
+
+## 12) GET /analytics/:websiteId/funnel
 
 ### data
 
@@ -275,37 +480,46 @@ Ghi chu:
       "count": 75
     }
   ],
+  "totalConversionRate": 0.375,
   "dropoff": [
     {
       "step": 1,
-      "dropoff": 0
+      "dropoff": null,
+      "conversionRate": null
     },
     {
       "step": 2,
-      "dropoff": 0.4
+      "dropoff": 0.4,
+      "conversionRate": 0.6
     },
     {
       "step": 3,
-      "dropoff": 0.375
+      "dropoff": 0.375,
+      "conversionRate": 0.625
     }
   ]
 }
 ```
 
 Ghi chu:
-- Neu khong truyen landingUrl: step 1 dung pageview dau tien.
-- Neu khong truyen nextUrl: step 2 dung pageview thu 2.
-- Neu khong truyen conversionUrl: conversion dua vao CUSTOM event co metadata conversion=true/converted=true/isConversion=true.
+- Neu khong truyen `landingUrl`: step 1 dung pageview dau tien.
+- Neu khong truyen `nextUrl`: step 2 dung pageview thu 2.
+- Neu khong truyen `conversionUrl`: conversion dua vao CUSTOM event co metadata `conversion=true` hoac `converted=true` hoac `isConversion=true`.
 
-## 9) Cac truong query anh huong den response
+## 13) Cac truong query anh huong den response
 
-- from, to: xac dinh range tra ve trong data.range.
-- limit: gioi han so phan tu cho top-pages va traffic-sources.
-- sessionLimit: gioi han so journeys trong behavior.
-- maxSessions: gioi han mau session cho funnel.
+- `from`, `to`: xac dinh `range`.
+- `limit`: gioi han so phan tu cho `events`, `top-pages`, `traffic-sources`.
+- `sessionLimit`: gioi han so `journeys` trong behavior, va gioi han session cho realtime.
+- `windowMinutes`: cua so realtime.
+- `limit` trong realtime la alias cu (deprecated), nen uu tien `sessionLimit`.
+- `refreshSeconds`: toc do SSE stream.
+- `periods`: so period retention tra ve.
+- `granularity`: cap tinh retention (`day` hoac `week`).
+- `maxSessions`: gioi han session mau cho funnel.
 
-## 10) Cac loi thuong gap (khong nam trong data)
+## 14) Cac loi thuong gap (khong nam trong data)
 
-- 400 Bad Request: from/to sai dinh dang ISO, from >= to.
-- 403 Forbidden: user khong so huu website.
-- 404 Not Found: websiteId khong ton tai.
+- `400 Bad Request`: `from`/`to` sai dinh dang ISO, `from >= to`.
+- `403 Forbidden`: user khong so huu website.
+- `404 Not Found`: `websiteId` khong ton tai.
