@@ -323,7 +323,7 @@
     init: function init(options) {
       var config = options || {};
       trackerConfig.apiKey = String(config.apiKey || '').trim();
-      trackerConfig.endpoint = config.endpoint || DEFAULT_ENDPOINT;
+      trackerConfig.endpoint = String(config.endpoint || DEFAULT_ENDPOINT);
       trackerConfig.sessionTtlMs = Number(config.sessionTtlMs || DEFAULT_SESSION_TTL_MS);
       trackerConfig.autoTrackPageview = config.autoTrackPageview !== false;
       trackerConfig.autoTrackClicks = config.autoTrackClicks === true;
@@ -366,9 +366,15 @@
     },
 
     trackCustom: function trackCustom(name, metadata) {
+      var eventName = name ? String(name) : undefined;
+      var mergedMetadata = Object.assign({}, metadata || {});
+      if (eventName) {
+        mergedMetadata.eventName = eventName;
+      }
+
       return track('CUSTOM', {
-        title: name ? String(name) : undefined,
-        metadata: metadata || {}
+        title: eventName,
+        metadata: mergedMetadata
       });
     },
 
@@ -390,7 +396,7 @@
       var apiKey = scriptTag.getAttribute('data-key');
       var endpoint = scriptTag.getAttribute('data-endpoint') || DEFAULT_ENDPOINT;
       var autoPageview = scriptTag.getAttribute('data-auto-pageview') !== 'false';
-      var autoClicks = scriptTag.getAttribute('data-auto-clicks') !== 'false';
+      var autoClicks = scriptTag.getAttribute('data-auto-clicks') === 'true';
 
       if (!apiKey) {
         console.warn('AnalystTracker: data-key attribute is required');

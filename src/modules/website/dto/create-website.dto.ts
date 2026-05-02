@@ -20,7 +20,7 @@ export class CreateWebsiteDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  @Matches(/^(?!https?:\/\/)(?!www\.)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i, {
+  @Matches(/^(?!https?:\/\/)(?!www\.)(localhost(:\d+)?|([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})$/, {
     message:
       'Domain must be a valid domain without protocol (e.g. example.com)',
   })
