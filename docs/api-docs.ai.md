@@ -99,11 +99,13 @@ Tất cả các API trả về thành công đều tuân theo chuẩn sau (bởi
   "path": "/auth/register",
   "timestamp": "2026-04-28T00:00:00.000Z",
   "data": {
-    "id": "uuid-string",
-    "email": "user@example.com",
-    "role": "USER",
-    "createdAt": "2026-04-28T00:00:00.000Z",
-    "updatedAt": "2026-04-28T00:00:00.000Z"
+    "user": {
+      "id": "uuid-string",
+      "email": "user@example.com",
+      "role": "USER",
+      "createdAt": "2026-04-28T00:00:00.000Z",
+      "updatedAt": "2026-04-28T00:00:00.000Z"
+    }
   }
 }
 ```
@@ -222,7 +224,7 @@ Lấy access token mới từ refresh_token cookie.
   "path": "/auth/logout",
   "timestamp": "2026-04-28T...",
   "data": {
-    "success": true
+    "message": "Logged out successfully"
   }
 }
 ```
@@ -259,6 +261,37 @@ Lấy thông tin profile hiện tại.
 
 ---
 
+### [GET] /auth/admin
+
+**Description:**
+Endpoint chi danh cho ADMIN.
+
+**Auth Required:** Yes (Role: ADMIN)
+
+**Headers:** (Authorization: Bearer <access_token>)
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Success",
+  "path": "/auth/admin",
+  "timestamp": "2026-04-28T...",
+  "data": {
+    "message": "Admin access granted",
+    "user": {
+      "id": "uuid-string",
+      "email": "user@example.com",
+      "role": "ADMIN"
+    }
+  }
+}
+```
+
+---
+
 ### [GET] /websites
 
 **Description:**
@@ -289,6 +322,34 @@ Lấy danh sách các Website của user hiện tại.
 
 ---
 
+### [GET] /websites/:id
+
+**Description:**
+Lấy chi tiet mot website theo id.
+
+**Auth Required:** Yes
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Success",
+  "path": "/websites/:id",
+  "timestamp": "2026-04-28T...",
+  "data": {
+    "id": "uuid-string",
+    "name": "My Site",
+    "domain": "example.com",
+    "userId": "uuid-string",
+    "createdAt": "2026-04-28T00:00:00.000Z"
+  }
+}
+```
+
+---
+
 ### [POST] /websites
 
 **Description:**
@@ -312,7 +373,25 @@ Tạo mới một Website.
 | name | string | Yes | Max 100 characters |
 | domain | string | Yes | Max 255 chars. Without protocol (e.g., example.com) |
 
-**Response:** Trả về Object Website vừa tạo giống format trong mảng `[GET] /websites`.
+**Response:**
+
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Success",
+  "path": "/websites",
+  "timestamp": "2026-04-28T00:00:00.000Z",
+  "data": {
+    "id": "uuid-string",
+    "name": "My Site",
+    "domain": "example.com",
+    "userId": "uuid-string",
+    "createdAt": "2026-04-28T00:00:00.000Z",
+    "apiKey": "sk_12345..."
+  }
+}
+```
 
 ---
 
@@ -342,7 +421,21 @@ Xóa website.
 
 **Auth Required:** Yes
 
-**Response:** Trả về Object `{"success": true}` trong `data`.
+**Response:** Trả về object xac nhan xoa.
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Success",
+  "path": "/websites/:id",
+  "timestamp": "2026-04-28T...",
+  "data": {
+    "deleted": true,
+    "websiteId": "uuid-string"
+  }
+}
+```
 
 ---
 
@@ -382,7 +475,26 @@ Lấy danh sách các API Key đang active của website.
 
 **Auth Required:** Yes
 
-**Response:** Trả về mảng các API Key object. Lưu ý `key` ở API này có thể đã bị hash hoặc ẩn một phần từ DB (chỉ hiện một phần).
+**Response:** Trả về mảng các API Key object (key duoc tra ve day du cho key active).
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Success",
+  "path": "/websites/:id/api-keys",
+  "timestamp": "2026-04-28T...",
+  "data": [
+    {
+      "id": "uuid-string",
+      "key": "sk_12345...",
+      "websiteId": "uuid-string",
+      "createdAt": "2026-04-28T00:00:00.000Z",
+      "revoked": false
+    }
+  ]
+}
+```
 
 ---
 
@@ -392,6 +504,25 @@ Lấy danh sách các API Key đang active của website.
 Thu hồi API Key.
 
 **Auth Required:** Yes
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Success",
+  "path": "/websites/:id/api-keys/:apiKeyId/revoke",
+  "timestamp": "2026-04-28T...",
+  "data": {
+    "id": "uuid-string",
+    "key": "sk_12345...",
+    "websiteId": "uuid-string",
+    "createdAt": "2026-04-28T00:00:00.000Z",
+    "revoked": true
+  }
+}
+```
 
 ---
 
@@ -432,13 +563,100 @@ Tracker ingest data lên hệ thống.
 | url | string | No | Absolute URL |
 | title | string | No | Page title |
 | referrer | string | No | Absolute URL referrer |
-| userAgent | string | No | Browser User-Agent |
+| userAgent | string | No | Optional, server overrides from request header |
 | country | string | No | VN, US... |
-| ip | string | No | IP Address |
+| ip | string | No | Optional, server overrides from request IP |
 | device | string | No | desktop, mobile... |
 | browser | string | No | Chrome, Safari... |
 | os | string | No | Windows, macOS... |
 | metadata | object | No | Dữ liệu custom tùy ý |
+
+**Note:**
+- `url` bat buoc neu `type = PAGEVIEW`.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Success",
+  "path": "/metrics/events",
+  "timestamp": "2026-04-28T...",
+  "data": {
+    "accepted": true,
+    "queued": false,
+    "externalEventId": "evt_123",
+    "websiteId": "uuid-string",
+    "occurredAt": "2026-04-28T00:00:00.000Z"
+  }
+}
+```
+
+---
+
+## 4.1 Huong dan thu thap data nguoi dung
+
+Muc tieu: thu thap hanh vi nguoi dung tren website thong qua `POST /metrics/events`.
+
+### 4.1.1 Quy tac chung
+- Moi event bat buoc co `eventId` duy nhat va `timestamp` (ms).
+- `url` bat buoc neu `type = PAGEVIEW`.
+- `sessionId` (tu client) dung de gom cac event trong cung mot phien.
+- `userId` (tu client) dung de gan event voi tai khoan noi bo neu co.
+- `referrer` va `url` phai la absolute URL.
+
+### 4.1.2 Goi y tao sessionId va eventId
+- `sessionId`: tao mot UUID va luu trong `localStorage`/`sessionStorage`.
+- `eventId`: tao UUID moi cho moi event (idempotency key).
+
+### 4.1.3 Mau payload tham khao
+
+**PAGEVIEW**
+```json
+{
+  "eventId": "evt_01HZXN9FZQ2X71G8A2M4D7KQ9E",
+  "type": "PAGEVIEW",
+  "timestamp": 1713945600000,
+  "sessionId": "sess_01HZXNB8G66RMVQ6W6D1E4VQ93",
+  "userId": "user_123",
+  "url": "https://example.com/pricing",
+  "title": "Pricing",
+  "referrer": "https://google.com"
+}
+```
+
+**CLICK**
+```json
+{
+  "eventId": "evt_01HZXN9FZQ2X71G8A2M4D7KQ9E",
+  "type": "CLICK",
+  "timestamp": 1713945600000,
+  "sessionId": "sess_01HZXNB8G66RMVQ6W6D1E4VQ93",
+  "userId": "user_123",
+  "url": "https://example.com/pricing",
+  "metadata": {
+    "element": "button",
+    "label": "start-trial"
+  }
+}
+```
+
+**CUSTOM**
+```json
+{
+  "eventId": "evt_01HZXN9FZQ2X71G8A2M4D7KQ9E",
+  "type": "CUSTOM",
+  "timestamp": 1713945600000,
+  "sessionId": "sess_01HZXNB8G66RMVQ6W6D1E4VQ93",
+  "userId": "user_123",
+  "metadata": {
+    "eventName": "purchase",
+    "value": 99.99,
+    "currency": "USD"
+  }
+}
+```
 
 ---
 
@@ -447,14 +665,18 @@ Tracker ingest data lên hệ thống.
 **Auth Required:** Yes
 **Headers:** `Authorization: Bearer <access_token>`
 
-Tất cả các API Analytics dưới đây đều chia sẻ chung Query params (trừ một số ngoại lệ được ghi chú riêng):
+Query params cho Analytics (co the khac nhau theo endpoint):
 
 | Query | Type | Required | Description |
 | ----- | ---- | -------- | ----------- |
 | from | string | No | Start time (ISO-8601) |
 | to | string | No | End time (ISO-8601) |
-| limit | number | No | Max items returned (1-100) |
-| sessionLimit | number | No | Max sessions returned (1-50) |
+| limit | number | No | Max items returned (1-100) - events, top-pages, traffic-sources |
+| sessionLimit | number | No | Max sessions returned (1-50) - behavior, realtime |
+
+**Notes:**
+- `sessionLimit` dung cho behavior va realtime.
+- `limit` trong realtime la alias cu (deprecated), nen uu tien `sessionLimit`.
 
 *(Note: Response Data của Analytics được bọc trong object `data` của Global Response Format. Dưới đây chỉ mô tả phần `data` object trả về).*
 
@@ -467,7 +689,7 @@ Tất cả các API Analytics dưới đây đều chia sẻ chung Query params 
 **Response `data` Field:**
 ```json
 {
-  "website": { "id": "...", "domain": "..." },
+  "website": { "id": "...", "name": "...", "domain": "...", "userId": "..." },
   "range": { "from": "...", "to": "..." },
   "previousRange": { "from": "...", "to": "..." },
   "summary": {
@@ -532,7 +754,7 @@ Tất cả các API Analytics dưới đây đều chia sẻ chung Query params 
 **Response `data` Field:**
 ```json
 {
-  "website": { "id": "..." },
+  "website": { "id": "...", "name": "...", "domain": "...", "userId": "..." },
   "range": { "from": "...", "to": "..." },
   "total": 1000,
   "pages": [
@@ -619,7 +841,10 @@ Tất cả các API Analytics dưới đây đều chia sẻ chung Query params 
   "deviceShare": [{ "value": "desktop", "count": 300, "share": 0.6 }],
   "browserUsage": [{ "value": "Chrome", "count": 250, "share": 0.5 }],
   "osUsage": [{ "value": "Windows", "count": 200, "share": 0.4 }],
-  "mobileVsDesktop": { "mobile": 200, "desktop": 300 }
+  "mobileVsDesktop": [
+    { "value": "mobile", "count": 200, "share": 0.4 },
+    { "value": "desktop", "count": 300, "share": 0.6 }
+  ]
 }
 ```
 
@@ -693,7 +918,12 @@ Tất cả các API Analytics dưới đây đều chia sẻ chung Query params 
     { "name": "Next page", "target": "/pricing", "count": 200 },
     { "name": "Conversion", "target": "/checkout", "count": 50 }
   ],
-  "totalConversionRate": 0.1
+  "totalConversionRate": 0.1,
+  "dropoff": [
+    { "step": 1, "dropoff": null, "conversionRate": null },
+    { "step": 2, "dropoff": 0.4, "conversionRate": 0.6 },
+    { "step": 3, "dropoff": 0.375, "conversionRate": 0.625 }
+  ]
 }
 ```
 
