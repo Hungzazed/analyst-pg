@@ -1,0 +1,13 @@
+export const DEFAULT_LIMIT = 10;
+export const DEFAULT_REALTIME_WINDOW_MINUTES = 5;
+export const DEFAULT_REALTIME_REFRESH_SECONDS = 5;
+export const DEFAULT_REALTIME_SESSION_LIMIT = 50;
+export const DEFAULT_RETENTION_PERIODS = 7;
+export const DEFAULT_DAILY_RANGE_DAYS = 29;
+export const TOP_TRANSITIONS_LIMIT = 20;
+export const TOP_METADATA_BREAKDOWN_LIMIT = 5;
+export const TOP_PAGES_LIMIT = 10;
+export const RATE_PRECISION_FACTOR = 1000;
+export const MILLIS_PER_SECOND = 1000;
+export const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+export const DAYS_PER_WEEK = 7;
