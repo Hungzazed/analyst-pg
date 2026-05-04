@@ -94,60 +94,6 @@ export class IngestMetricDto {
   referrer?: string;
 
   @ApiPropertyOptional({
-    example: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-    maxLength: 512,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(512)
-  userAgent?: string;
-
-  @ApiPropertyOptional({
-    example: 'VN',
-    maxLength: 64,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  country?: string;
-
-  @ApiPropertyOptional({
-    example: '203.113.131.1',
-    maxLength: 64,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  ip?: string;
-
-  @ApiPropertyOptional({
-    example: 'desktop',
-    maxLength: 128,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  device?: string;
-
-  @ApiPropertyOptional({
-    example: 'Chrome',
-    maxLength: 128,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  browser?: string;
-
-  @ApiPropertyOptional({
-    example: 'Windows',
-    maxLength: 128,
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  os?: string;
-
-  @ApiPropertyOptional({
     example: { buttonId: 'start-trial', plan: 'pro' },
     type: 'object',
     additionalProperties: true,

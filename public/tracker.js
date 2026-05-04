@@ -136,53 +136,78 @@
     }
   }
 
-  function parseUserAgent(userAgent) {
-    var ua = (userAgent || '').toLowerCase();
+  var RESERVED_CONTEXT_KEYS = {
+    eventId: true,
+    timestamp: true,
+    sessionId: true,
+    userAgent: true,
+    ip: true,
+    country: true,
+    device: true,
+    browser: true,
+    os: true,
+    url: true,
+    title: true,
+    referrer: true
+  };
 
-    var browser = 'Unknown';
-    if (ua.indexOf('edg/') >= 0) {
-      browser = 'Edge';
-    } else if (ua.indexOf('opr/') >= 0 || ua.indexOf('opera') >= 0) {
-      browser = 'Opera';
-    } else if (ua.indexOf('chrome/') >= 0) {
-      browser = 'Chrome';
-    } else if (ua.indexOf('safari/') >= 0 && ua.indexOf('chrome/') < 0) {
-      browser = 'Safari';
-    } else if (ua.indexOf('firefox/') >= 0) {
-      browser = 'Firefox';
+  function omitReservedFields(input) {
+    if (!input || typeof input !== 'object') {
+      return {};
     }
 
-    var os = 'Unknown';
-    if (ua.indexOf('windows') >= 0) {
-      os = 'Windows';
-    } else if (ua.indexOf('mac os') >= 0 || ua.indexOf('macintosh') >= 0) {
-      os = 'macOS';
-    } else if (ua.indexOf('android') >= 0) {
-      os = 'Android';
-    } else if (ua.indexOf('iphone') >= 0 || ua.indexOf('ipad') >= 0 || ua.indexOf('ios') >= 0) {
-      os = 'iOS';
-    } else if (ua.indexOf('linux') >= 0) {
-      os = 'Linux';
+    var output = {};
+    for (var key in input) {
+      if (!Object.prototype.hasOwnProperty.call(input, key) || RESERVED_CONTEXT_KEYS[key]) {
+        continue;
+      }
+      output[key] = input[key];
     }
 
-    var device = 'desktop';
-    if (ua.indexOf('mobile') >= 0 || ua.indexOf('iphone') >= 0 || ua.indexOf('android') >= 0) {
-      device = 'mobile';
-    } else if (ua.indexOf('ipad') >= 0 || ua.indexOf('tablet') >= 0) {
-      device = 'tablet';
+    return output;
+  }
+
+  function normalizeMetadata(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      return {};
     }
 
-    return {
-      browser: browser,
-      os: os,
-      device: device
-    };
+    return Object.assign({}, input);
+  }
+
+  function sanitizePublicPayload(input) {
+    if (!input || typeof input !== 'object') {
+      return {};
+    }
+
+    var metadata = normalizeMetadata(input.metadata);
+    var output = {};
+
+    if (input.userId !== undefined && input.userId !== null && input.userId !== '') {
+      output.userId = String(input.userId);
+    }
+
+    var extraFields = omitReservedFields(input);
+    for (var key in extraFields) {
+      if (!Object.prototype.hasOwnProperty.call(extraFields, key) || key === 'metadata' || key === 'userId') {
+        continue;
+      }
+      metadata[key] = extraFields[key];
+    }
+
+    if (Object.keys(metadata).length > 0) {
+      output.metadata = metadata;
+    }
+
+    return output;
   }
 
   function buildPayload(type, partial) {
-    var ua = window.navigator.userAgent || '';
-    var detected = parseUserAgent(ua);
     var sessionId = getOrCreateSessionId();
+    var context = trackerConfig.context && typeof trackerConfig.context === 'object'
+      ? trackerConfig.context
+      : {};
+    var payloadOverrides = partial && typeof partial === 'object' ? partial : {};
 
     var payload = {
       eventId: generateId('evt'),
@@ -193,10 +218,6 @@
       url: sanitizeUrl(window.location.href),
       title: document.title || undefined,
       referrer: sanitizeUrl(document.referrer),
-      userAgent: ua,
-      device: detected.device,
-      browser: detected.browser,
-      os: detected.os,
       metadata: {}
     };
 
@@ -204,16 +225,33 @@
       payload.metadata = Object.assign({}, trackerConfig.defaultMetadata);
     }
 
-    if (trackerConfig.context && typeof trackerConfig.context === 'object') {
-      payload = Object.assign(payload, trackerConfig.context);
+    if (context.userId !== undefined) {
+      payload.userId = String(context.userId);
     }
 
-    if (partial && typeof partial === 'object') {
-      payload = Object.assign(payload, partial);
+    if (payloadOverrides.userId !== undefined) {
+      payload.userId = payloadOverrides.userId ? String(payloadOverrides.userId) : undefined;
+    }
+
+    if (payloadOverrides.title !== undefined) {
+      payload.title = payloadOverrides.title;
+    }
+
+    if (payloadOverrides.url !== undefined) {
+      payload.url = sanitizeUrl(payloadOverrides.url) || payload.url;
+    }
+
+    if (payloadOverrides.referrer !== undefined) {
+      payload.referrer = sanitizeUrl(payloadOverrides.referrer) || payload.referrer;
     }
 
     if (payload.metadata && typeof payload.metadata === 'object') {
-      payload.metadata = Object.assign({}, trackerConfig.defaultMetadata || {}, partial && partial.metadata ? partial.metadata : {});
+      payload.metadata = Object.assign(
+        {},
+        trackerConfig.defaultMetadata || {},
+        normalizeMetadata(context.metadata),
+        normalizeMetadata(payloadOverrides.metadata)
+      );
     }
 
     if (payload.type === 'PAGEVIEW' && !sanitizeUrl(payload.url)) {
@@ -341,7 +379,7 @@
       trackerConfig.autoTrackPageview = config.autoTrackPageview !== false;
       trackerConfig.autoTrackClicks = config.autoTrackClicks === true;
       trackerConfig.defaultMetadata = config.defaultMetadata || {};
-      trackerConfig.context = config.context || {};
+      trackerConfig.context = sanitizePublicPayload(config.context || {});
 
       if (trackerConfig.autoTrackPageview) {
         track('PAGEVIEW');
@@ -366,7 +404,11 @@
     },
 
     setContext: function setContext(context) {
-      trackerConfig.context = Object.assign({}, trackerConfig.context, context || {});
+      trackerConfig.context = Object.assign(
+        {},
+        trackerConfig.context,
+        sanitizePublicPayload(context || {})
+      );
       return this;
     },
 
@@ -392,7 +434,7 @@
     },
 
     track: function trackAny(type, payload) {
-      return track(type, payload || {});
+      return track(type, sanitizePublicPayload(payload || {}));
     }
   };
 

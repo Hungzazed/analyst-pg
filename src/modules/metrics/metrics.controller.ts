@@ -49,12 +49,19 @@ export class MetricsController {
     const userAgent = request.get('user-agent');
     const origin = request.get('origin');
     const referer = request.get('referer');
+    const countryHint =
+      request.get('cf-ipcountry') ??
+      request.get('x-vercel-ip-country') ??
+      request.get('cloudfront-viewer-country') ??
+      request.get('x-country-code') ??
+      undefined;
 
     return this.metricsService.ingestEvent({
       apiKey,
       dto: ingestMetricDto,
       origin,
       referer,
+      countryHint,
       ip: forwardedIp ?? request.ip,
       userAgent,
     });

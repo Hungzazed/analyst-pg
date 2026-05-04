@@ -585,7 +585,7 @@ export class AnalyticsService {
     const range = { from, to: now };
 
     const [sessions, events] = await Promise.all([
-      this.fetchSessions(websiteId, range),
+      this.fetchActiveSessions(websiteId, range),
       this.fetchEvents(websiteId, range),
     ]);
 
@@ -1111,6 +1111,31 @@ export class AnalyticsService {
         ip: true,
       },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  private async fetchActiveSessions(websiteId: string, range: Range) {
+    return this.prismaService.session.findMany({
+      where: {
+        websiteId,
+        lastSeenAt: {
+          gte: range.from,
+          lt: range.to,
+        },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        lastSeenAt: true,
+        country: true,
+        device: true,
+        browser: true,
+        os: true,
+        userId: true,
+        externalSessionId: true,
+        ip: true,
+      },
+      orderBy: { lastSeenAt: 'desc' },
     });
   }
 

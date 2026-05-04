@@ -1,18 +1,41 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { EventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure';
 import { IngestMetricDto } from './dto/ingest-metric.dto';
+import {
+  assertRequestDomain,
+  getUtcDayStart,
+  normalizeString,
+  parseUnixTimestamp,
+  resolveClientContext,
+} from './utils/metrics.utils';
+
+const MAX_LEN = {
+  EVENT_ID: 128,
+  SESSION_ID: 128,
+  USER_ID: 255,
+  URL: 2048,
+  TITLE: 255,
+  REFERRER: 2048,
+  IP: 64,
+  USER_AGENT: 512,
+  COUNTRY: 64,
+  DEVICE: 128,
+  BROWSER: 128,
+  OS: 128,
+  DOMAIN: 255,
+} as const;
 
 interface IngestEventInput {
   apiKey: string;
   dto: IngestMetricDto;
   origin?: string;
   referer?: string;
+  countryHint?: string;
   ip?: string;
   userAgent?: string;
 }
@@ -36,12 +59,18 @@ interface MetricsEventMessage {
   metadata?: Record<string, unknown>;
 }
 
+interface SessionResolution {
+  sessionId: string;
+  isNewSession: boolean;
+  isUniqueVisitor: boolean;
+}
+
 @Injectable()
 export class MetricsService {
   constructor(private readonly prismaService: PrismaService) {}
 
   async ingestEvent(input: IngestEventInput) {
-    const apiKey = this.normalize(input.apiKey);
+    const apiKey = normalizeString(input.apiKey);
 
     if (!apiKey) {
       throw new BadRequestException('x-api-key header is required');
@@ -70,19 +99,27 @@ export class MetricsService {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    this.assertRequestDomain({
+    assertRequestDomain({
       websiteDomain: websiteApiKey.website.domain,
       origin: input.origin,
       referer: input.referer,
     });
 
-    const externalEventId = this.normalize(input.dto.eventId, 128);
+    const externalEventId = normalizeString(input.dto.eventId, MAX_LEN.EVENT_ID);
     if (!externalEventId) {
       throw new BadRequestException('eventId is required');
     }
 
-    const occurredAt = this.parseUnixTimestamp(input.dto.timestamp);
-    const externalSessionId = this.normalize(input.dto.sessionId, 128);
+    const occurredAt = parseUnixTimestamp(input.dto.timestamp);
+    const externalSessionId = normalizeString(
+      input.dto.sessionId,
+      MAX_LEN.SESSION_ID,
+    );
+    const clientContext = resolveClientContext({
+      ip: input.ip,
+      userAgent: input.userAgent,
+      countryHint: input.countryHint,
+    });
 
     const message: MetricsEventMessage = {
       eventId: externalEventId,
@@ -90,16 +127,16 @@ export class MetricsService {
       externalSessionId,
       type: input.dto.type,
       timestamp: occurredAt.getTime(),
-      url: this.normalize(input.dto.url, 2048),
-      title: this.normalize(input.dto.title, 255),
-      referrer: this.normalize(input.dto.referrer, 2048),
-      ip: this.normalize(input.ip, 64),
-      userAgent: this.normalize(input.userAgent, 512),
-      userId: this.normalize(input.dto.userId ?? undefined, 255),
-      country: this.normalize(input.dto.country, 64),
-      device: this.normalize(input.dto.device, 128),
-      browser: this.normalize(input.dto.browser, 128),
-      os: this.normalize(input.dto.os, 128),
+      url: normalizeString(input.dto.url, MAX_LEN.URL),
+      title: normalizeString(input.dto.title, MAX_LEN.TITLE),
+      referrer: normalizeString(input.dto.referrer, MAX_LEN.REFERRER),
+      ip: clientContext.ip,
+      userAgent: clientContext.userAgent,
+      userId: normalizeString(input.dto.userId ?? undefined, MAX_LEN.USER_ID),
+      country: clientContext.country,
+      device: clientContext.device,
+      browser: clientContext.browser,
+      os: clientContext.os,
       metadata: input.dto.metadata,
     };
 
@@ -115,25 +152,30 @@ export class MetricsService {
   }
 
   private async persistEvent(message: MetricsEventMessage): Promise<void> {
-    const occurredAt = this.parseUnixTimestamp(message.timestamp);
-    const dayStart = this.getUtcDayStart(occurredAt);
+    const occurredAt = parseUnixTimestamp(message.timestamp);
+    const dayStart = getUtcDayStart(occurredAt);
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const ip = this.normalize(message.ip, 64);
-    const userAgent = this.normalize(message.userAgent, 512);
-    const country = this.normalize(message.country, 64);
-    const device = this.normalize(message.device, 128);
-    const browser = this.normalize(message.browser, 128);
-    const os = this.normalize(message.os, 128);
-    const url = this.normalize(message.url, 2048);
-    const referrer = this.normalize(message.referrer, 2048);
-    const title = this.normalize(message.title, 255);
-    const externalSessionId = this.normalize(message.externalSessionId, 128);
-    const userId = this.normalize(message.userId, 255);
-    const metadata = message.metadata
-      ? (message.metadata as Prisma.InputJsonValue)
-      : undefined;
+    const fields = {
+      ip: normalizeString(message.ip, MAX_LEN.IP),
+      userAgent: normalizeString(message.userAgent, MAX_LEN.USER_AGENT),
+      country: normalizeString(message.country, MAX_LEN.COUNTRY),
+      device: normalizeString(message.device, MAX_LEN.DEVICE),
+      browser: normalizeString(message.browser, MAX_LEN.BROWSER),
+      os: normalizeString(message.os, MAX_LEN.OS),
+      url: normalizeString(message.url, MAX_LEN.URL),
+      referrer: normalizeString(message.referrer, MAX_LEN.REFERRER),
+      title: normalizeString(message.title, MAX_LEN.TITLE),
+      externalSessionId: normalizeString(
+        message.externalSessionId,
+        MAX_LEN.SESSION_ID,
+      ),
+      userId: normalizeString(message.userId, MAX_LEN.USER_ID),
+      metadata: message.metadata
+        ? (message.metadata as Prisma.InputJsonValue)
+        : undefined,
+    };
 
     await this.prismaService.$transaction(async (tx) => {
       const existingEvent = await tx.event.findFirst({
@@ -150,239 +192,244 @@ export class MetricsService {
         return;
       }
 
-      let sessionId: string | undefined;
-      let isNewSession = false;
-      let isUniqueVisitor = false;
-
-      if (externalSessionId) {
-        const existingSession = await tx.session.findFirst({
-          where: {
-            websiteId: message.websiteId,
-            externalSessionId,
-          },
-          select: {
-            id: true,
-          },
-        });
-
-        if (existingSession) {
-          sessionId = existingSession.id;
-          await tx.session.update({
-            where: { id: sessionId },
-            data: {
-              userId,
-              ip,
-              userAgent,
-              country,
-              device,
-              browser,
-              os,
-            },
-          });
-        }
-      }
-
-      if (!sessionId) {
-        isNewSession = true;
-
-        if (externalSessionId) {
-          isUniqueVisitor = true;
-        } else if (ip) {
-          const seenToday = await tx.session.findFirst({
-            where: {
-              websiteId: message.websiteId,
-              ip,
-              createdAt: {
-                gte: dayStart,
-                lt: dayEnd,
-              },
-            },
-            select: {
-              id: true,
-            },
-          });
-
-          isUniqueVisitor = !seenToday;
-        } else {
-          isUniqueVisitor = true;
-        }
-
-        const createdSession = await tx.session.create({
-          data: {
-            websiteId: message.websiteId,
-            externalSessionId,
-            userId,
-            ip,
-            userAgent,
-            country,
-            device,
-            browser,
-            os,
-          },
-          select: {
-            id: true,
-          },
-        });
-
-        sessionId = createdSession.id;
-      }
-
-      await tx.event.create({
-        data: {
+      const { sessionId, isNewSession, isUniqueVisitor } =
+        await this.resolveOrCreateSession(tx, {
           websiteId: message.websiteId,
-          sessionId,
-          eventId: message.eventId,
-          userId,
-          type: message.type,
-          title,
-          url,
-          referrer,
-          userAgent,
-          ip,
-          country,
-          device,
-          browser,
-          os,
-          metadata,
-          occurredAt,
-        },
+          externalSessionId: fields.externalSessionId,
+          userId: fields.userId,
+          ip: fields.ip,
+          userAgent: fields.userAgent,
+          country: fields.country,
+          device: fields.device,
+          browser: fields.browser,
+          os: fields.os,
+          dayStart,
+          dayEnd,
+        });
+
+      await this.createEvent(tx, {
+        message,
+        sessionId,
+        occurredAt,
+        fields,
       });
 
-      const pageviewsIncrement = message.type === EventType.PAGEVIEW ? 1 : 0;
-      const visitsIncrement = isNewSession ? 1 : 0;
-      const uniquesIncrement = isUniqueVisitor ? 1 : 0;
-
-      if (
-        pageviewsIncrement === 0 &&
-        visitsIncrement === 0 &&
-        uniquesIncrement === 0
-      ) {
-        return;
-      }
-
-      await tx.eventDaily.upsert({
-        where: {
-          websiteId_date: {
-            websiteId: message.websiteId,
-            date: dayStart,
-          },
-        },
-        update: {
-          pageviews: {
-            increment: pageviewsIncrement,
-          },
-          visits: {
-            increment: visitsIncrement,
-          },
-          uniques: {
-            increment: uniquesIncrement,
-          },
-        },
-        create: {
-          websiteId: message.websiteId,
-          date: dayStart,
-          pageviews: pageviewsIncrement,
-          visits: visitsIncrement,
-          uniques: uniquesIncrement,
-        },
+      await this.updateDailyStats(tx, {
+        websiteId: message.websiteId,
+        eventType: message.type,
+        dayStart,
+        isNewSession,
+        isUniqueVisitor,
       });
     });
   }
 
-  private getUtcDayStart(date: Date): Date {
-    return new Date(
-      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-    );
+  private async resolveOrCreateSession(
+    tx: Prisma.TransactionClient,
+    input: {
+      websiteId: string;
+      externalSessionId?: string;
+      userId?: string;
+      ip?: string;
+      userAgent?: string;
+      country?: string;
+      device?: string;
+      browser?: string;
+      os?: string;
+      dayStart: Date;
+      dayEnd: Date;
+    },
+  ): Promise<SessionResolution> {
+    if (input.externalSessionId) {
+      const existingSession = await tx.session.findFirst({
+        where: {
+          websiteId: input.websiteId,
+          externalSessionId: input.externalSessionId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (existingSession) {
+        await tx.session.update({
+          where: { id: existingSession.id },
+          data: {
+            userId: input.userId,
+            ip: input.ip,
+            userAgent: input.userAgent,
+            country: input.country,
+            device: input.device,
+            browser: input.browser,
+            os: input.os,
+          },
+        });
+
+        return {
+          sessionId: existingSession.id,
+          isNewSession: false,
+          isUniqueVisitor: false,
+        };
+      }
+    }
+
+    const isUniqueVisitor = await this.determineUniqueVisitor(tx, {
+      websiteId: input.websiteId,
+      externalSessionId: input.externalSessionId,
+      ip: input.ip,
+      dayStart: input.dayStart,
+      dayEnd: input.dayEnd,
+    });
+
+    const createdSession = await tx.session.create({
+      data: {
+        websiteId: input.websiteId,
+        externalSessionId: input.externalSessionId,
+        userId: input.userId,
+        ip: input.ip,
+        userAgent: input.userAgent,
+        country: input.country,
+        device: input.device,
+        browser: input.browser,
+        os: input.os,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return {
+      sessionId: createdSession.id,
+      isNewSession: true,
+      isUniqueVisitor,
+    };
   }
 
-  private isDuplicateEventError(error: unknown): boolean {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002' &&
-      Array.isArray(error.meta?.target) &&
-      error.meta.target.includes('websiteId') &&
-      error.meta.target.includes('eventId')
-    );
+  private async determineUniqueVisitor(
+    tx: Prisma.TransactionClient,
+    input: {
+      websiteId: string;
+      externalSessionId?: string;
+      ip?: string;
+      dayStart: Date;
+      dayEnd: Date;
+    },
+  ): Promise<boolean> {
+    if (input.externalSessionId) {
+      return true;
+    }
+
+    if (input.ip) {
+      const seenToday = await tx.session.findFirst({
+        where: {
+          websiteId: input.websiteId,
+          ip: input.ip,
+          createdAt: {
+            gte: input.dayStart,
+            lt: input.dayEnd,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      return !seenToday;
+    }
+
+    return true;
   }
 
-  private normalize(value?: string | null, maxLen = 255): string | undefined {
-    if (!value) {
-      return undefined;
-    }
-
-    const normalized = value.trim();
-
-    if (!normalized) {
-      return undefined;
-    }
-
-    return normalized.slice(0, maxLen);
+  private async createEvent(
+    tx: Prisma.TransactionClient,
+    input: {
+      message: MetricsEventMessage;
+      sessionId: string;
+      occurredAt: Date;
+      fields: {
+        ip?: string;
+        userAgent?: string;
+        country?: string;
+        device?: string;
+        browser?: string;
+        os?: string;
+        url?: string;
+        referrer?: string;
+        title?: string;
+        userId?: string;
+        metadata?: Prisma.InputJsonValue;
+      };
+    },
+  ): Promise<void> {
+    await tx.event.create({
+      data: {
+        websiteId: input.message.websiteId,
+        sessionId: input.sessionId,
+        eventId: input.message.eventId,
+        userId: input.fields.userId,
+        type: input.message.type,
+        title: input.fields.title,
+        url: input.fields.url,
+        referrer: input.fields.referrer,
+        userAgent: input.fields.userAgent,
+        ip: input.fields.ip,
+        country: input.fields.country,
+        device: input.fields.device,
+        browser: input.fields.browser,
+        os: input.fields.os,
+        metadata: input.fields.metadata,
+        occurredAt: input.occurredAt,
+      },
+    });
   }
 
-  private parseUnixTimestamp(timestamp: number): Date {
-    const millis = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
-    const date = new Date(millis);
+  private async updateDailyStats(
+    tx: Prisma.TransactionClient,
+    input: {
+      websiteId: string;
+      eventType: EventType;
+      dayStart: Date;
+      isNewSession: boolean;
+      isUniqueVisitor: boolean;
+    },
+  ): Promise<void> {
+    const pageviewsIncrement = input.eventType === EventType.PAGEVIEW ? 1 : 0;
+    const visitsIncrement = input.isNewSession ? 1 : 0;
+    const uniquesIncrement = input.isUniqueVisitor ? 1 : 0;
 
-    if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException('timestamp must be a valid Unix timestamp');
+    if (
+      pageviewsIncrement === 0 &&
+      visitsIncrement === 0 &&
+      uniquesIncrement === 0
+    ) {
+      return;
     }
 
-    return date;
-  }
-
-  private assertRequestDomain(input: {
-    websiteDomain: string;
-    origin?: string;
-    referer?: string;
-  }): void {
-    const websiteHost = this.normalizeHost(input.websiteDomain);
-
-    if (!websiteHost) {
-      throw new ForbiddenException('Website domain is misconfigured');
-    }
-
-    const originHost = this.extractHost(input.origin);
-    const refererHost = this.extractHost(input.referer);
-    const requestHost = originHost ?? refererHost;
-
-    if (!requestHost) {
-      throw new ForbiddenException('Origin or referer header is required');
-    }
-
-    const isMatch =
-      requestHost === websiteHost || requestHost.endsWith(`.${websiteHost}`);
-
-    if (!isMatch) {
-      throw new ForbiddenException(
-        'Request domain does not match website domain',
-      );
-    }
-  }
-
-  private extractHost(rawUrl?: string): string | undefined {
-    const normalized = this.normalize(rawUrl, 2048);
-
-    if (!normalized) {
-      return undefined;
-    }
-
-    try {
-      return new URL(normalized).hostname.toLowerCase();
-    } catch {
-      return undefined;
-    }
-  }
-
-  private normalizeHost(domain: string): string | undefined {
-    const normalized = this.normalize(domain, 255);
-    if (!normalized) {
-      return undefined;
-    }
-
-    if (/^https?:\/\//i.test(normalized)) {
-      return this.extractHost(normalized);
-    }
-
-    return normalized.toLowerCase();
+    await tx.eventDaily.upsert({
+      where: {
+        websiteId_date: {
+          websiteId: input.websiteId,
+          date: input.dayStart,
+        },
+      },
+      update: {
+        pageviews: {
+          increment: pageviewsIncrement,
+        },
+        visits: {
+          increment: visitsIncrement,
+        },
+        uniques: {
+          increment: uniquesIncrement,
+        },
+      },
+      create: {
+        websiteId: input.websiteId,
+        date: input.dayStart,
+        pageviews: pageviewsIncrement,
+        visits: visitsIncrement,
+        uniques: uniquesIncrement,
+      },
+    });
   }
 }
