@@ -6,11 +6,7 @@ import { AnalyticsModule } from './modules/analystics';
 import { AuthModule } from './modules/auth';
 import { MetricsModule } from './modules/metrics';
 import { WebsiteModule } from './modules/website';
-import {
-  RedisModule,
-  PostgresModule,
-  PrismaModule,
-} from './infrastructure';
+import { RedisModule, PostgresModule, PrismaModule } from './infrastructure';
 
 @Module({
   imports: [

@@ -3,9 +3,7 @@ import type { Request, Response, CookieOptions } from 'express';
 export const REFRESH_TOKEN_COOKIE_NAME = 'refreshToken';
 const REFRESH_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
-const buildCookieOptions = (
-  withMaxAge: boolean,
-): CookieOptions => ({
+const buildCookieOptions = (withMaxAge: boolean): CookieOptions => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',

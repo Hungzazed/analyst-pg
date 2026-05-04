@@ -151,14 +151,14 @@ export class AuthService {
       },
     });
 
-    let matchedSessionId: string | null = null;
-    for (const session of refreshSessions) {
-      const isMatch = await bcrypt.compare(refreshToken, session.token);
-      if (isMatch) {
-        matchedSessionId = session.id;
-        break;
-      }
-    }
+    const matchResults = await Promise.all(
+      refreshSessions.map(async (session) => ({
+        id: session.id,
+        isMatch: await bcrypt.compare(refreshToken, session.token),
+      })),
+    );
+    const matchedSession = matchResults.find((result) => result.isMatch);
+    const matchedSessionId = matchedSession ? matchedSession.id : null;
 
     if (!matchedSessionId) {
       throw new ForbiddenException('Invalid refresh token');
@@ -204,14 +204,14 @@ export class AuthService {
       },
     });
 
-    let matchedSessionId: string | null = null;
-    for (const session of refreshSessions) {
-      const isMatch = await bcrypt.compare(refreshToken, session.token);
-      if (isMatch) {
-        matchedSessionId = session.id;
-        break;
-      }
-    }
+    const matchResults = await Promise.all(
+      refreshSessions.map(async (session) => ({
+        id: session.id,
+        isMatch: await bcrypt.compare(refreshToken, session.token),
+      })),
+    );
+    const matchedSession = matchResults.find((result) => result.isMatch);
+    const matchedSessionId = matchedSession ? matchedSession.id : null;
 
     if (!matchedSessionId) {
       throw new ForbiddenException('Invalid refresh token');

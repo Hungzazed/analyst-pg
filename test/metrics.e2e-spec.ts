@@ -8,10 +8,7 @@ import { MetricsController } from '../src/modules/metrics/metrics.controller';
 import { MetricsKafkaConsumer } from '../src/modules/metrics/kafka/metrics-kafka.consumer';
 import { MetricsKafkaProducer } from '../src/modules/metrics/kafka/metrics-kafka.producer';
 import { MetricsService } from '../src/modules/metrics/metrics.service';
-import {
-  HttpExceptionFilter,
-  ResponseInterceptor,
-} from '../src/common';
+import { HttpExceptionFilter, ResponseInterceptor } from '../src/common';
 import { KafkaService, PrismaService } from '../src/infrastructure';
 
 type ApiKeyRecord = {
@@ -74,12 +71,16 @@ type KafkaMessageRecord = {
 
 class FakeKafkaConsumer {
   subscribe = jest.fn().mockResolvedValue(undefined);
-  run = jest.fn(async (config: { eachMessage: (payload: any) => Promise<void> }) => {
-    this.eachMessage = config.eachMessage;
-  });
+  run = jest.fn(
+    async (config: { eachMessage: (payload: any) => Promise<void> }) => {
+      this.eachMessage = config.eachMessage;
+    },
+  );
   disconnect = jest.fn().mockResolvedValue(undefined);
 
-  eachMessage?: (payload: { message: { value: Buffer | null } }) => Promise<void>;
+  eachMessage?: (payload: {
+    message: { value: Buffer | null };
+  }) => Promise<void>;
 }
 
 class FakeKafkaService {
@@ -114,42 +115,52 @@ class InMemoryPrismaService {
   private counter = 0;
 
   readonly apiKey = {
-    findFirst: jest.fn(async (query: { where: { key: string; revoked: boolean } }) => {
-      const record = this.apiKeys.get(query.where.key);
+    findFirst: jest.fn(
+      async (query: { where: { key: string; revoked: boolean } }) => {
+        const record = this.apiKeys.get(query.where.key);
 
-      if (!record || record.revoked !== query.where.revoked) {
-        return null;
-      }
+        if (!record || record.revoked !== query.where.revoked) {
+          return null;
+        }
 
-      return {
-        websiteId: record.websiteId,
-        website: {
-          domain: record.domain,
-        },
-      };
-    }),
+        return {
+          websiteId: record.websiteId,
+          website: {
+            domain: record.domain,
+          },
+        };
+      },
+    ),
   };
 
   readonly event = {
-    findFirst: jest.fn(async (query: { where: { websiteId: string; eventId: string } }) => {
-      return this.events.get(this.eventKey(query.where.websiteId, query.where.eventId)) ?? null;
-    }),
-    create: jest.fn(async (input: { data: Omit<StoredEvent, 'id' | 'createdAt'> }) => {
-      const id = this.nextId('event');
-      const createdAt = new Date('2026-04-26T00:00:00.000Z');
-      const event: StoredEvent = {
-        id,
-        createdAt,
-        ...input.data,
-      };
+    findFirst: jest.fn(
+      async (query: { where: { websiteId: string; eventId: string } }) => {
+        return (
+          this.events.get(
+            this.eventKey(query.where.websiteId, query.where.eventId),
+          ) ?? null
+        );
+      },
+    ),
+    create: jest.fn(
+      async (input: { data: Omit<StoredEvent, 'id' | 'createdAt'> }) => {
+        const id = this.nextId('event');
+        const createdAt = new Date('2026-04-26T00:00:00.000Z');
+        const event: StoredEvent = {
+          id,
+          createdAt,
+          ...input.data,
+        };
 
-      this.events.set(this.eventKey(event.websiteId, event.eventId), event);
-      return {
-        id,
-        eventId: event.eventId,
-        createdAt,
-      };
-    }),
+        this.events.set(this.eventKey(event.websiteId, event.eventId), event);
+        return {
+          id,
+          eventId: event.eventId,
+          createdAt,
+        };
+      },
+    ),
   };
 
   readonly session = {
@@ -192,32 +203,41 @@ class InMemoryPrismaService {
         return null;
       },
     ),
-    create: jest.fn(async (input: { data: Omit<StoredSession, 'id' | 'createdAt' | 'lastSeenAt'> }) => {
-      const id = this.nextId('session');
-      const createdAt = new Date('2026-04-26T00:00:00.000Z');
-      const session: StoredSession = {
-        id,
-        createdAt,
-        lastSeenAt: createdAt,
-        ...input.data,
-      };
+    create: jest.fn(
+      async (input: {
+        data: Omit<StoredSession, 'id' | 'createdAt' | 'lastSeenAt'>;
+      }) => {
+        const id = this.nextId('session');
+        const createdAt = new Date('2026-04-26T00:00:00.000Z');
+        const session: StoredSession = {
+          id,
+          createdAt,
+          lastSeenAt: createdAt,
+          ...input.data,
+        };
 
-      this.sessions.set(id, session);
-      return { id };
-    }),
-    update: jest.fn(async (input: { where: { id: string }; data: Partial<StoredSession> }) => {
-      const session = this.sessions.get(input.where.id);
+        this.sessions.set(id, session);
+        return { id };
+      },
+    ),
+    update: jest.fn(
+      async (input: {
+        where: { id: string };
+        data: Partial<StoredSession>;
+      }) => {
+        const session = this.sessions.get(input.where.id);
 
-      if (!session) {
-        throw new Error('Session not found');
-      }
+        if (!session) {
+          throw new Error('Session not found');
+        }
 
-      Object.assign(session, input.data, {
-        lastSeenAt: new Date('2026-04-26T00:00:00.000Z'),
-      });
+        Object.assign(session, input.data, {
+          lastSeenAt: new Date('2026-04-26T00:00:00.000Z'),
+        });
 
-      return { id: session.id };
-    }),
+        return { id: session.id };
+      },
+    ),
   };
 
   readonly eventDaily = {
@@ -252,15 +272,22 @@ class InMemoryPrismaService {
     ),
   };
 
-  readonly $transaction = jest.fn(async <T>(callback: (tx: any) => Promise<T>) => {
-    return callback({
-      event: this.event,
-      session: this.session,
-      eventDaily: this.eventDaily,
-    });
-  });
+  readonly $transaction = jest.fn(
+    async <T>(callback: (tx: any) => Promise<T>) => {
+      return callback({
+        event: this.event,
+        session: this.session,
+        eventDaily: this.eventDaily,
+      });
+    },
+  );
 
-  registerApiKey(input: { key: string; websiteId: string; domain: string; revoked?: boolean }): void {
+  registerApiKey(input: {
+    key: string;
+    websiteId: string;
+    domain: string;
+    revoked?: boolean;
+  }): void {
     this.apiKeys.set(input.key, {
       websiteId: input.websiteId,
       domain: input.domain,
@@ -333,9 +360,12 @@ describe('Metrics flow e2e', () => {
     return consumer;
   };
 
-  const publishToConsumer = async (message: Record<string, unknown> | string) => {
+  const publishToConsumer = async (
+    message: Record<string, unknown> | string,
+  ) => {
     const consumer = getKafkaConsumer();
-    const value = typeof message === 'string' ? message : JSON.stringify(message);
+    const value =
+      typeof message === 'string' ? message : JSON.stringify(message);
     const eachMessage = consumer.eachMessage;
 
     if (!eachMessage) {
@@ -444,7 +474,9 @@ describe('Metrics flow e2e', () => {
       ],
     });
 
-    const queuedMessage = JSON.parse(kafka.sentMessages[0].messages[0].value) as {
+    const queuedMessage = JSON.parse(
+      kafka.sentMessages[0].messages[0].value,
+    ) as {
       eventId: string;
       websiteId: string;
       timestamp: number;
@@ -493,7 +525,9 @@ describe('Metrics flow e2e', () => {
       )
       .expect(201);
 
-    const queuedMessage = JSON.parse(kafka.sentMessages[0].messages[0].value) as {
+    const queuedMessage = JSON.parse(
+      kafka.sentMessages[0].messages[0].value,
+    ) as {
       eventId: string;
       externalSessionId?: string;
       userId?: string;
@@ -618,7 +652,9 @@ describe('Metrics flow e2e', () => {
       )
       .expect(201);
 
-    const queuedMessage = JSON.parse(kafka.sentMessages[0].messages[0].value) as {
+    const queuedMessage = JSON.parse(
+      kafka.sentMessages[0].messages[0].value,
+    ) as {
       timestamp: number;
     };
 
@@ -634,7 +670,9 @@ describe('Metrics flow e2e', () => {
       .send(firstPayload)
       .expect(201);
 
-    await publishToConsumer(JSON.parse(kafka.sentMessages[0].messages[0].value));
+    await publishToConsumer(
+      JSON.parse(kafka.sentMessages[0].messages[0].value),
+    );
 
     expect(prisma.sessions.size).toBe(1);
     expect(prisma.eventDailies.size).toBe(1);
@@ -651,13 +689,18 @@ describe('Metrics flow e2e', () => {
       .send(secondPayload)
       .expect(201);
 
-    await publishToConsumer(JSON.parse(kafka.sentMessages[1].messages[0].value));
+    await publishToConsumer(
+      JSON.parse(kafka.sentMessages[1].messages[0].value),
+    );
 
     expect(prisma.sessions.size).toBe(1);
     expect(prisma.events.size).toBe(2);
     expect(prisma.eventDailies.size).toBe(1);
 
-    const responseData = firstResponse.body.data as { accepted: boolean; queued: boolean };
+    const responseData = firstResponse.body.data as {
+      accepted: boolean;
+      queued: boolean;
+    };
     expect(responseData.accepted).toBe(true);
     expect(responseData.queued).toBe(true);
   });
