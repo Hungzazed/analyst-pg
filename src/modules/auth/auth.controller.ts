@@ -20,11 +20,7 @@ import {
   ApiUnauthorizedResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
-import {
-  AuthResponse,
-  AuthService,
-  RefreshResponse,
-} from './auth.service';
+import { AuthResponse, AuthService, RefreshResponse } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
@@ -51,7 +47,9 @@ export class AuthController {
   }
 
   @Post('login')
-  @ApiOperation({ summary: 'Login and receive access token, set refresh cookie' })
+  @ApiOperation({
+    summary: 'Login and receive access token, set refresh cookie',
+  })
   @ApiOkResponse({ description: 'Login successful' })
   @ApiUnauthorizedResponse({ description: 'Email or password is incorrect' })
   async login(
