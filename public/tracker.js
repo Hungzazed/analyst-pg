@@ -8,11 +8,11 @@
   };
 
   var DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000;
-  var DEFAULT_ENDPOINT = '/metrics/events';
+  var DEFAULT_ENDPOINT_PATH = '/metrics/events';
 
   var trackerConfig = {
     apiKey: '',
-    endpoint: DEFAULT_ENDPOINT,
+    endpoint: DEFAULT_ENDPOINT_PATH,
     sessionTtlMs: DEFAULT_SESSION_TTL_MS,
     autoTrackPageview: true,
     autoTrackClicks: false,
@@ -121,6 +121,19 @@
     }
 
     return undefined;
+  }
+
+  function resolveScriptDefaultEndpoint(scriptTag) {
+    if (!scriptTag || !scriptTag.src) {
+      return DEFAULT_ENDPOINT_PATH;
+    }
+
+    try {
+      var scriptUrl = new URL(scriptTag.src, window.location.href);
+      return scriptUrl.origin + DEFAULT_ENDPOINT_PATH;
+    } catch (_error) {
+      return DEFAULT_ENDPOINT_PATH;
+    }
   }
 
   function parseUserAgent(userAgent) {
@@ -323,7 +336,7 @@
     init: function init(options) {
       var config = options || {};
       trackerConfig.apiKey = String(config.apiKey || '').trim();
-      trackerConfig.endpoint = String(config.endpoint || DEFAULT_ENDPOINT);
+      trackerConfig.endpoint = String(config.endpoint || DEFAULT_ENDPOINT_PATH);
       trackerConfig.sessionTtlMs = Number(config.sessionTtlMs || DEFAULT_SESSION_TTL_MS);
       trackerConfig.autoTrackPageview = config.autoTrackPageview !== false;
       trackerConfig.autoTrackClicks = config.autoTrackClicks === true;
@@ -386,20 +399,30 @@
   // Auto-initialize from script tag data attributes
   function autoInitializeFromScriptTag() {
     try {
-      var scripts = document.querySelectorAll('script[data-key]');
-      if (scripts.length === 0) {
+      var scriptTag = document.currentScript;
+      if (!scriptTag || !scriptTag.getAttribute) {
+        var scripts = document.querySelectorAll('script[data-key],script[data-api-key]');
+        if (scripts.length === 0) {
+          return;
+        }
+        scriptTag = scripts[scripts.length - 1];
+      }
+
+      if (!scriptTag) {
         return;
       }
 
-      // Get the last script tag with data-key attribute (this script)
-      var scriptTag = scripts[scripts.length - 1];
-      var apiKey = scriptTag.getAttribute('data-key');
-      var endpoint = scriptTag.getAttribute('data-endpoint') || DEFAULT_ENDPOINT;
+      var apiKey =
+        scriptTag.getAttribute('data-key') ||
+        scriptTag.getAttribute('data-api-key');
+      var endpoint =
+        scriptTag.getAttribute('data-endpoint') ||
+        resolveScriptDefaultEndpoint(scriptTag);
       var autoPageview = scriptTag.getAttribute('data-auto-pageview') !== 'false';
       var autoClicks = scriptTag.getAttribute('data-auto-clicks') === 'true';
 
       if (!apiKey) {
-        console.warn('AnalystTracker: data-key attribute is required');
+        console.warn('AnalystTracker: data-key (or data-api-key) attribute is required');
         return;
       }
 
