@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analyst Tracker Test Page</title>
+    <style>
+      :root {
+        --bg: #f7f8fc;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f766e;
+        --primary-2: #115e59;
+        --border: #d1d5db;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(160deg, #eef2ff 0%, var(--bg) 50%, #ecfeff 100%);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 760px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: var(--muted);
+      }
+
+      .row {
+        display: grid;
+        gap: 10px;
+        margin: 14px 0;
+      }
+
+      label {
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-size: 14px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 600;
+        cursor: pointer;
+        color: white;
+        background: var(--primary);
+      }
+
+      button:hover {
+        background: var(--primary-2);
+      }
+
+      .secondary {
+        background: #475569;
+      }
+
+      .secondary:hover {
+        background: #334155;
+      }
+
+      #log {
+        margin-top: 14px;
+        background: #0b1020;
+        color: #dbeafe;
+        border-radius: 10px;
+        min-height: 110px;
+        padding: 12px;
+        font-family: Consolas, Monaco, monospace;
+        font-size: 12px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+    </style>
+    <script
+      defer
+      src="http://localhost:3000/tracker.js"
+      data-key="ak_14e7a37d713e5ebfd317c51b8bca8c8aeccd3f7e4e50611a"
+      data-endpoint="http://localhost:3000/metrics/events"
+      data-auto-clicks="true"
+    ></script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <h1>Analyst Tracker Test</h1>
+        <p>
+          Replace <code>data-api-key</code> in page source with your real API key, then click buttons below.
+        </p>
+
+        <div class="row">
+          <label for="userId">User ID</label>
+          <input id="userId" type="text" placeholder="e.g. user_001" />
+        </div>
+
+        <div class="actions">
+          <button id="set-user" type="button">Set User</button>
+          <button id="clear-user" class="secondary" type="button">Clear User</button>
+        </div>
+
+        <div class="actions">
+          <button id="track-pageview" type="button">Track Pageview</button>
+          <button id="track-click" type="button">Track Click</button>
+          <button id="track-custom" type="button">Track Custom</button>
+        </div>
+
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <script>
+      (function setupTestPage() {
+        var logEl = document.getElementById('log');
+
+        function log(message) {
+          var ts = new Date().toISOString();
+          logEl.textContent = "[" + ts + "] " + message + "\n" + logEl.textContent;
+        }
+
+        function ensureTracker() {
+          if (!window.AnalystTracker) {
+            log("AnalystTracker is not loaded. Check /tracker.js and script data-api-key.");
+            return false;
+          }
+          return true;
+        }
+
+        document.getElementById('set-user').addEventListener('click', function () {
+          if (!ensureTracker()) return;
+          var value = document.getElementById('userId').value.trim();
+          if (!value) {
+            log("User ID is empty.");
+            return;
+          }
+          window.AnalystTracker.setUser(value);
+          log("Set user: " + value);
+        });
+
+        document.getElementById('clear-user').addEventListener('click', function () {
+          if (!ensureTracker()) return;
+          window.AnalystTracker.clearUser();
+          log("Cleared user.");
+        });
+
+        document.getElementById('track-pageview').addEventListener('click', function () {
+          if (!ensureTracker()) return;
+          window.AnalystTracker.trackPageview({ source: "manual-test-page" });
+          log("Sent PAGEVIEW event.");
+        });
+
+        document.getElementById('track-click').addEventListener('click', function () {
+          if (!ensureTracker()) return;
+          window.AnalystTracker.trackClick({ source: "manual-test-page", action: "cta-click" });
+          log("Sent CLICK event.");
+        });
+
+        document.getElementById('track-custom').addEventListener('click', function () {
+          if (!ensureTracker()) return;
+          window.AnalystTracker.trackCustom("signup_started", {
+            source: "manual-test-page",
+            plan: "pro"
+          });
+          log("Sent CUSTOM event: signup_started.");
+        });
+
+        log("Test page loaded.");
+      })();
+    </script>
+  </body>
+</html>
