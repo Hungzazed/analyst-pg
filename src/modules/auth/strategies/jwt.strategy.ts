@@ -32,13 +32,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ignoreExpiration: false,
       secretOrKey: configService.get<string>(
         'JWT_ACCESS_SECRET',
-        configService.get<string>('JWT_SECRET', 'dev-secret'),
+        configService.getOrThrow<string>('JWT_SECRET'),
       ),
     });
 
     this.refreshTokenSecret = this.configService.get<string>(
       'JWT_REFRESH_SECRET',
-      this.configService.get<string>('JWT_SECRET', 'dev-secret'),
+      this.configService.getOrThrow<string>('JWT_SECRET'),
     );
     this.refreshTokenExpiresIn = this.configService.get<StringValue>(
       'JWT_REFRESH_EXPIRES_IN',
