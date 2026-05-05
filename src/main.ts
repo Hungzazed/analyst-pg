@@ -14,7 +14,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: process.env.FRONTEND_URL?.split(',') || ['http://localhost:3000'],
-    credentials: true, // nếu dùng cookie / auth
+    credentials: true,
   });
 
   app.use(cookieParser());

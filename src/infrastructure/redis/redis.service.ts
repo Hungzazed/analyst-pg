@@ -18,7 +18,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const config = this.configService.get('redis');
 
     this.client = createClient({
-      url: `redis://${config.password ? ':' + config.password + '@' : ''}${config.host}:${config.port}/${config.db}`,
+      url: process.env.REDIS_URL,
       socket: {
         reconnectStrategy: config.retryStrategy,
       },
