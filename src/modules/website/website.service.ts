@@ -101,10 +101,7 @@ export class WebsiteService {
           apiKey: website.apiKeys[0]?.key ?? apiKey,
         };
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
+        if (this.isPrismaKnownRequestError(error) && error.code === 'P2002') {
           const target = this.getUniqueTarget(error);
 
           if (target.includes('domain')) {
@@ -157,10 +154,7 @@ export class WebsiteService {
           },
         });
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
+        if (this.isPrismaKnownRequestError(error) && error.code === 'P2002') {
           const target = this.getUniqueTarget(error);
 
           if (target.includes('key')) {
@@ -306,12 +300,15 @@ export class WebsiteService {
   }
 
   private handleDomainConflict(error: unknown): void {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+    if (this.isPrismaKnownRequestError(error) && error.code === 'P2002') {
       throw new ConflictException('Domain already exists');
     }
+  }
+
+  private isPrismaKnownRequestError(
+    error: unknown,
+  ): error is Prisma.PrismaClientKnownRequestError {
+    return error instanceof Prisma.PrismaClientKnownRequestError;
   }
 
   private getUniqueTarget(
