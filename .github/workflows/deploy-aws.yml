@@ -1,0 +1,138 @@
+name: CI/CD - Deploy NestJS Backend to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'Dockerfile'
+      - '.github/workflows/deploy-aws.yml'
+
+jobs:
+  # -------------------------------------------------------------
+  # Job 1: Test and Lint
+  # -------------------------------------------------------------
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: './package-lock.json'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+
+      - name: Lint Code
+        run: npm run lint
+        continue-on-error: true # Do not block deployment on minor lint issues, but output logs
+
+      - name: Run Unit Tests
+        run: npm run test
+        env:
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+
+  # -------------------------------------------------------------
+  # Job 2: Build, Push to ECR and Deploy to Beanstalk
+  # -------------------------------------------------------------
+  deploy:
+    name: Build & Deploy to AWS
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set Image Tag
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # Build and push the Docker image to AWS ECR
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_NAME }}:${{ steps.vars.outputs.sha_short }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Generate AWS Elastic Beanstalk Single Container deployment description
+      - name: Generate Dockerrun.aws.json
+        run: |
+          cat <<EOF > Dockerrun.aws.json
+          {
+            "AWSEBDockerrunVersion": "1",
+            "Image": {
+              "Name": "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_NAME }}:${{ steps.vars.outputs.sha_short }}",
+              "Update": "true"
+            },
+            "Ports": [
+              {
+                "ContainerPort": 3000,
+                "HostPort": 80
+              }
+            ]
+          }
+          EOF
+
+      # Archive Dockerrun.aws.json into a deployment bundle zip file
+      - name: Package Deployment Artifacts
+        run: zip deploy.zip Dockerrun.aws.json
+
+      # Upload the deploy.zip artifact to S3 bucket
+      - name: Upload Artifact to Amazon S3
+        run: |
+          aws s3 cp deploy.zip s3://${{ secrets.EB_S3_BUCKET_NAME }}/deploy-${{ steps.vars.outputs.sha_short }}.zip
+
+      # Register deployment bundle as a new Elastic Beanstalk Application Version
+      - name: Create New Beanstalk Application Version
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name "${{ secrets.EB_APPLICATION_NAME }}" \
+            --version-label "release-${{ steps.vars.outputs.sha_short }}" \
+            --source-bundle S3Bucket="${{ secrets.EB_S3_BUCKET_NAME }}",S3Key="deploy-${{ steps.vars.outputs.sha_short }}.zip" \
+            --description "Deployment of commit ${{ steps.vars.outputs.sha_short }}"
+
+      # Deploy the newly registered version to target Environment
+      - name: Deploy to Elastic Beanstalk Environment
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name "${{ secrets.EB_ENVIRONMENT_NAME }}" \
+            --version-label "release-${{ steps.vars.outputs.sha_short }}"
+
+      # Wait for Beanstalk Deployment to Complete
+      - name: Wait for Beanstalk Deployment to Complete
+        run: |
+          aws elasticbeanstalk wait environment-updated \
+            --environment-name "${{ secrets.EB_ENVIRONMENT_NAME }}" \
+            --version-label "release-${{ steps.vars.outputs.sha_short }}"
