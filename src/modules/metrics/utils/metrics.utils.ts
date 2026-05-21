@@ -66,9 +66,7 @@ export function resolveClientContext(
   const os = normalizeString(parsedUserAgent.os.name, 128);
   const deviceType = parsedUserAgent.device.type;
   const device =
-    deviceType === 'mobile' || deviceType === 'tablet'
-      ? deviceType
-      : 'desktop';
+    deviceType === 'mobile' || deviceType === 'tablet' ? deviceType : 'desktop';
 
   return {
     ip,
@@ -97,7 +95,9 @@ export function assertRequestDomain(input: AssertRequestDomainInput): void {
   const isMatch =
     requestHost === websiteHost || requestHost.endsWith(`.${websiteHost}`);
   if (!isMatch) {
-    throw new ForbiddenException('Request domain does not match website domain');
+    throw new ForbiddenException(
+      'Request domain does not match website domain',
+    );
   }
 }
 

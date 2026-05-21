@@ -5,11 +5,9 @@ import { Test } from '@nestjs/testing';
 import { EventType, Prisma } from '@prisma/client';
 import request from 'supertest';
 import { MetricsController } from '../src/modules/metrics/metrics.controller';
-import { MetricsKafkaConsumer } from '../src/modules/metrics/kafka/metrics-kafka.consumer';
-import { MetricsKafkaProducer } from '../src/modules/metrics/kafka/metrics-kafka.producer';
 import { MetricsService } from '../src/modules/metrics/metrics.service';
 import { HttpExceptionFilter, ResponseInterceptor } from '../src/common';
-import { KafkaService, PrismaService } from '../src/infrastructure';
+import { PrismaService } from '../src/infrastructure';
 
 type ApiKeyRecord = {
   websiteId: string;
@@ -61,52 +59,6 @@ type StoredEventDaily = {
   uniques: number;
 };
 
-type KafkaMessageRecord = {
-  topic: string;
-  messages: Array<{
-    key?: string;
-    value: string;
-  }>;
-};
-
-class FakeKafkaConsumer {
-  subscribe = jest.fn().mockResolvedValue(undefined);
-  run = jest.fn(
-    async (config: { eachMessage: (payload: any) => Promise<void> }) => {
-      this.eachMessage = config.eachMessage;
-    },
-  );
-  disconnect = jest.fn().mockResolvedValue(undefined);
-
-  eachMessage?: (payload: {
-    message: { value: Buffer | null };
-  }) => Promise<void>;
-}
-
-class FakeKafkaService {
-  readonly sentMessages: KafkaMessageRecord[] = [];
-  readonly consumers: FakeKafkaConsumer[] = [];
-
-  send = jest.fn(async (params: KafkaMessageRecord) => {
-    this.sentMessages.push(params);
-  });
-
-  createConsumer = jest.fn(async () => {
-    const consumer = new FakeKafkaConsumer();
-    this.consumers.push(consumer);
-    return consumer;
-  });
-
-  releaseConsumer = jest.fn(async (consumer: FakeKafkaConsumer) => {
-    await consumer.disconnect();
-  });
-
-  reset(): void {
-    this.sentMessages.length = 0;
-    this.send.mockClear();
-  }
-}
-
 class InMemoryPrismaService {
   readonly apiKeys = new Map<string, ApiKeyRecord>();
   readonly sessions = new Map<string, StoredSession>();
@@ -117,6 +69,7 @@ class InMemoryPrismaService {
   readonly apiKey = {
     findFirst: jest.fn(
       async (query: { where: { key: string; revoked: boolean } }) => {
+        await Promise.resolve();
         const record = this.apiKeys.get(query.where.key);
 
         if (!record || record.revoked !== query.where.revoked) {
@@ -136,6 +89,7 @@ class InMemoryPrismaService {
   readonly event = {
     findFirst: jest.fn(
       async (query: { where: { websiteId: string; eventId: string } }) => {
+        await Promise.resolve();
         return (
           this.events.get(
             this.eventKey(query.where.websiteId, query.where.eventId),
@@ -145,6 +99,7 @@ class InMemoryPrismaService {
     ),
     create: jest.fn(
       async (input: { data: Omit<StoredEvent, 'id' | 'createdAt'> }) => {
+        await Promise.resolve();
         const id = this.nextId('event');
         const createdAt = new Date('2026-04-26T00:00:00.000Z');
         const event: StoredEvent = {
@@ -173,6 +128,7 @@ class InMemoryPrismaService {
           createdAt?: { gte: Date; lt: Date };
         };
       }) => {
+        await Promise.resolve();
         const { websiteId, externalSessionId, ip, createdAt } = query.where;
 
         for (const session of this.sessions.values()) {
@@ -207,6 +163,7 @@ class InMemoryPrismaService {
       async (input: {
         data: Omit<StoredSession, 'id' | 'createdAt' | 'lastSeenAt'>;
       }) => {
+        await Promise.resolve();
         const id = this.nextId('session');
         const createdAt = new Date('2026-04-26T00:00:00.000Z');
         const session: StoredSession = {
@@ -225,6 +182,7 @@ class InMemoryPrismaService {
         where: { id: string };
         data: Partial<StoredSession>;
       }) => {
+        await Promise.resolve();
         const session = this.sessions.get(input.where.id);
 
         if (!session) {
@@ -251,6 +209,7 @@ class InMemoryPrismaService {
         };
         create: StoredEventDaily;
       }) => {
+        await Promise.resolve();
         const key = this.dailyKey(
           input.where.websiteId_date.websiteId,
           input.where.websiteId_date.date,
@@ -328,8 +287,6 @@ class InMemoryPrismaService {
 describe('Metrics flow e2e', () => {
   let app: INestApplication;
   let prisma: InMemoryPrismaService;
-  let kafka: FakeKafkaService;
-  let metricsKafkaConsumer: MetricsKafkaConsumer;
 
   const baseTimestampMs = Date.parse('2026-04-26T12:00:00.000Z');
 
@@ -342,60 +299,20 @@ describe('Metrics flow e2e', () => {
     referrer: 'https://google.com',
     title: 'Pricing',
     userId: 'user_1',
-    country: 'VN',
-    device: 'desktop',
-    browser: 'Chrome',
-    os: 'Windows',
     metadata: { plan: 'pro' },
     ...overrides,
   });
 
-  const getKafkaConsumer = () => {
-    const consumer = kafka.consumers[0];
-
-    if (!consumer || !consumer.eachMessage) {
-      throw new Error('Kafka consumer was not initialized');
-    }
-
-    return consumer;
-  };
-
-  const publishToConsumer = async (
-    message: Record<string, unknown> | string,
-  ) => {
-    const consumer = getKafkaConsumer();
-    const value =
-      typeof message === 'string' ? message : JSON.stringify(message);
-    const eachMessage = consumer.eachMessage;
-
-    if (!eachMessage) {
-      throw new Error('Kafka consumer callback was not initialized');
-    }
-
-    await eachMessage({
-      message: {
-        value: Buffer.from(value),
-      },
-    });
-  };
-
   beforeAll(async () => {
     prisma = new InMemoryPrismaService();
-    kafka = new FakeKafkaService();
 
     const moduleRef = await Test.createTestingModule({
       controllers: [MetricsController],
       providers: [
         MetricsService,
-        MetricsKafkaProducer,
-        MetricsKafkaConsumer,
         {
           provide: PrismaService,
           useValue: prisma,
-        },
-        {
-          provide: KafkaService,
-          useValue: kafka,
         },
       ],
     }).compile();
@@ -412,14 +329,10 @@ describe('Metrics flow e2e', () => {
     app.useGlobalInterceptors(new ResponseInterceptor());
 
     await app.init();
-
-    metricsKafkaConsumer = moduleRef.get(MetricsKafkaConsumer);
-    await metricsKafkaConsumer.onModuleInit();
   });
 
   beforeEach(() => {
     prisma.reset();
-    kafka.reset();
     prisma.registerApiKey({
       key: 'valid-key',
       websiteId: 'website_1',
@@ -437,17 +350,7 @@ describe('Metrics flow e2e', () => {
     await app.close();
   });
 
-  it('boots the metrics consumer and subscribes to the Kafka topic', () => {
-    expect(kafka.createConsumer).toHaveBeenCalledWith(
-      expect.stringContaining('metrics-events'),
-    );
-    expect(kafka.consumers[0]?.subscribe).toHaveBeenCalledWith({
-      topic: 'metrics.events',
-      fromBeginning: false,
-    });
-  });
-
-  it('ingests a pageview event, queues it, and allows the consumer to persist it', async () => {
+  it('ingests a pageview event and persists it directly', async () => {
     const response = await request(app.getHttpServer())
       .post('/metrics/events')
       .set('x-api-key', 'valid-key')
@@ -459,42 +362,10 @@ describe('Metrics flow e2e', () => {
 
     expect(response.body.data).toMatchObject({
       accepted: true,
-      queued: true,
+      queued: false,
       externalEventId: 'evt_01J8M3Y3B3T5X7C2D4E6F8G9H0',
       websiteId: 'website_1',
     });
-
-    expect(kafka.send).toHaveBeenCalledTimes(1);
-    expect(kafka.sentMessages[0]).toMatchObject({
-      topic: 'metrics.events',
-      messages: [
-        {
-          key: 'website_1',
-        },
-      ],
-    });
-
-    const queuedMessage = JSON.parse(
-      kafka.sentMessages[0].messages[0].value,
-    ) as {
-      eventId: string;
-      websiteId: string;
-      timestamp: number;
-      ip?: string;
-      userAgent?: string;
-      externalSessionId?: string;
-    };
-
-    expect(queuedMessage).toMatchObject({
-      eventId: 'evt_01J8M3Y3B3T5X7C2D4E6F8G9H0',
-      websiteId: 'website_1',
-      timestamp: baseTimestampMs,
-      ip: '203.113.10.20',
-      userAgent: 'Mozilla/5.0 (Macintosh)',
-      externalSessionId: 'sess_01J8M3Y3B3T5X7C2D4E6F8G9H0',
-    });
-
-    await publishToConsumer(queuedMessage);
 
     expect(prisma.sessions.size).toBe(1);
     expect(prisma.events.size).toBe(1);
@@ -509,7 +380,7 @@ describe('Metrics flow e2e', () => {
     });
   });
 
-  it('trims and normalizes request fields before enqueue', async () => {
+  it('trims and normalizes request fields before persist', async () => {
     await request(app.getHttpServer())
       .post('/metrics/events')
       .set('x-api-key', '   valid-key   ')
@@ -525,18 +396,11 @@ describe('Metrics flow e2e', () => {
       )
       .expect(201);
 
-    const queuedMessage = JSON.parse(
-      kafka.sentMessages[0].messages[0].value,
-    ) as {
-      eventId: string;
-      externalSessionId?: string;
-      userId?: string;
-      title?: string;
-    };
-
-    expect(queuedMessage).toMatchObject({
+    expect(prisma.events.size).toBe(1);
+    const event = prisma.events.get('website_1:evt_trimmed');
+    expect(event).toBeDefined();
+    expect(event).toMatchObject({
       eventId: 'evt_trimmed',
-      externalSessionId: 'sess_trimmed',
       userId: 'user_trimmed',
       title: 'Pricing page',
     });
@@ -550,7 +414,7 @@ describe('Metrics flow e2e', () => {
       .send(buildPayload())
       .expect(201);
 
-    expect(kafka.send).toHaveBeenCalledTimes(1);
+    expect(prisma.events.size).toBe(1);
   });
 
   it('accepts subdomain origins for the same website', async () => {
@@ -561,7 +425,7 @@ describe('Metrics flow e2e', () => {
       .send(buildPayload())
       .expect(201);
 
-    expect(kafka.send).toHaveBeenCalledTimes(1);
+    expect(prisma.events.size).toBe(1);
   });
 
   it('rejects missing api key header', async () => {
@@ -571,7 +435,7 @@ describe('Metrics flow e2e', () => {
       .send(buildPayload())
       .expect(400);
 
-    expect(kafka.send).not.toHaveBeenCalled();
+    expect(prisma.events.size).toBe(0);
   });
 
   it('rejects invalid pageview payload when url is missing', async () => {
@@ -586,7 +450,7 @@ describe('Metrics flow e2e', () => {
       )
       .expect(400);
 
-    expect(kafka.send).not.toHaveBeenCalled();
+    expect(prisma.events.size).toBe(0);
   });
 
   it('rejects validation errors from malformed payloads', async () => {
@@ -616,7 +480,7 @@ describe('Metrics flow e2e', () => {
       .send(buildPayload())
       .expect(401);
 
-    expect(kafka.send).not.toHaveBeenCalled();
+    expect(prisma.events.size).toBe(0);
   });
 
   it('rejects mismatched domains', async () => {
@@ -627,7 +491,7 @@ describe('Metrics flow e2e', () => {
       .send(buildPayload())
       .expect(403);
 
-    expect(kafka.send).not.toHaveBeenCalled();
+    expect(prisma.events.size).toBe(0);
   });
 
   it('rejects requests without origin or referer headers', async () => {
@@ -637,10 +501,10 @@ describe('Metrics flow e2e', () => {
       .send(buildPayload())
       .expect(403);
 
-    expect(kafka.send).not.toHaveBeenCalled();
+    expect(prisma.events.size).toBe(0);
   });
 
-  it('converts unix seconds timestamps before enqueue', async () => {
+  it('converts unix seconds timestamps before persist', async () => {
     await request(app.getHttpServer())
       .post('/metrics/events')
       .set('x-api-key', 'valid-key')
@@ -652,27 +516,19 @@ describe('Metrics flow e2e', () => {
       )
       .expect(201);
 
-    const queuedMessage = JSON.parse(
-      kafka.sentMessages[0].messages[0].value,
-    ) as {
-      timestamp: number;
-    };
-
-    expect(queuedMessage.timestamp).toBe(1713945600000);
+    const event = prisma.events.get('website_1:evt_01J8M3Y3B3T5X7C2D4E6F8G9H0');
+    expect(event).toBeDefined();
+    expect(event!.occurredAt.getTime()).toBe(1713945600000);
   });
 
   it('persists existing session events without duplicating the session', async () => {
     const firstPayload = buildPayload();
-    const firstResponse = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post('/metrics/events')
       .set('x-api-key', 'valid-key')
       .set('origin', 'https://shop.example.com')
       .send(firstPayload)
       .expect(201);
-
-    await publishToConsumer(
-      JSON.parse(kafka.sentMessages[0].messages[0].value),
-    );
 
     expect(prisma.sessions.size).toBe(1);
     expect(prisma.eventDailies.size).toBe(1);
@@ -689,174 +545,8 @@ describe('Metrics flow e2e', () => {
       .send(secondPayload)
       .expect(201);
 
-    await publishToConsumer(
-      JSON.parse(kafka.sentMessages[1].messages[0].value),
-    );
-
     expect(prisma.sessions.size).toBe(1);
     expect(prisma.events.size).toBe(2);
     expect(prisma.eventDailies.size).toBe(1);
-
-    const responseData = firstResponse.body.data as {
-      accepted: boolean;
-      queued: boolean;
-    };
-    expect(responseData.accepted).toBe(true);
-    expect(responseData.queued).toBe(true);
-  });
-
-  it('consumer creates a new session for first pageview and updates counters', async () => {
-    await publishToConsumer({
-      eventId: 'evt_consumer_1',
-      websiteId: 'website_1',
-      externalSessionId: 'sess_consumer_1',
-      type: EventType.PAGEVIEW,
-      timestamp: baseTimestampMs,
-      url: 'https://shop.example.com/home',
-      referrer: 'https://google.com',
-      ip: '198.51.100.10',
-      userAgent: 'Mozilla/5.0',
-      metadata: { source: 'e2e' },
-    });
-
-    expect(prisma.session.create).toHaveBeenCalledTimes(1);
-    expect(prisma.event.create).toHaveBeenCalledTimes(1);
-    expect(prisma.eventDaily.upsert).toHaveBeenCalledTimes(1);
-
-    const daily = Array.from(prisma.eventDailies.values())[0];
-    expect(daily).toMatchObject({
-      pageviews: 1,
-      visits: 1,
-      uniques: 1,
-    });
-  });
-
-  it('consumer reuses an existing session for the same external session id', async () => {
-    await publishToConsumer({
-      eventId: 'evt_consumer_2',
-      websiteId: 'website_1',
-      externalSessionId: 'sess_shared',
-      type: EventType.PAGEVIEW,
-      timestamp: baseTimestampMs,
-      url: 'https://shop.example.com/home',
-      referrer: 'https://google.com',
-      ip: '198.51.100.10',
-      userAgent: 'Mozilla/5.0',
-      metadata: {},
-    });
-
-    await publishToConsumer({
-      eventId: 'evt_consumer_3',
-      websiteId: 'website_1',
-      externalSessionId: 'sess_shared',
-      type: EventType.PAGEVIEW,
-      timestamp: baseTimestampMs + 1000,
-      url: 'https://shop.example.com/about',
-      referrer: 'https://shop.example.com/home',
-      ip: '198.51.100.10',
-      userAgent: 'Mozilla/5.0',
-      metadata: {},
-    });
-
-    expect(prisma.session.create).toHaveBeenCalledTimes(1);
-    expect(prisma.session.update).toHaveBeenCalled();
-
-    const daily = Array.from(prisma.eventDailies.values())[0];
-    expect(daily).toMatchObject({
-      pageviews: 2,
-      visits: 1,
-      uniques: 1,
-    });
-  });
-
-  it('consumer counts unique visitor by ip when session id is missing', async () => {
-    await publishToConsumer({
-      eventId: 'evt_consumer_4',
-      websiteId: 'website_1',
-      type: EventType.PAGEVIEW,
-      timestamp: baseTimestampMs,
-      url: 'https://shop.example.com/home',
-      referrer: 'https://google.com',
-      ip: '198.51.100.11',
-      userAgent: 'Mozilla/5.0',
-    });
-
-    const daily = Array.from(prisma.eventDailies.values())[0];
-    expect(daily).toMatchObject({
-      uniques: 1,
-    });
-  });
-
-  it('consumer does not increment daily counters for non-pageview events in an existing session', async () => {
-    prisma.sessions.set('session_existing', {
-      id: 'session_existing',
-      websiteId: 'website_1',
-      externalSessionId: 'sess_click',
-      userId: null,
-      ip: '198.51.100.12',
-      userAgent: 'Mozilla/5.0',
-      country: null,
-      device: null,
-      browser: null,
-      os: null,
-      createdAt: new Date(baseTimestampMs),
-      lastSeenAt: new Date(baseTimestampMs),
-    });
-    prisma.session.findFirst.mockResolvedValueOnce({ id: 'session_existing' });
-
-    await publishToConsumer({
-      eventId: 'evt_consumer_5',
-      websiteId: 'website_1',
-      externalSessionId: 'sess_click',
-      type: EventType.CLICK,
-      timestamp: baseTimestampMs,
-      url: 'https://shop.example.com/home',
-      referrer: 'https://shop.example.com/home',
-      ip: '198.51.100.12',
-      userAgent: 'Mozilla/5.0',
-      metadata: { buttonId: 'cta' },
-    });
-
-    expect(prisma.eventDaily.upsert).not.toHaveBeenCalled();
-    expect(prisma.event.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('consumer ignores duplicate events when the same event id is delivered twice', async () => {
-    const payload = {
-      eventId: 'evt_consumer_dup',
-      websiteId: 'website_1',
-      externalSessionId: 'sess_dup',
-      type: EventType.PAGEVIEW,
-      timestamp: baseTimestampMs,
-      url: 'https://shop.example.com/home',
-      referrer: 'https://google.com',
-      ip: '198.51.100.13',
-      userAgent: 'Mozilla/5.0',
-      metadata: {},
-    };
-
-    await publishToConsumer(payload);
-    await publishToConsumer(payload);
-
-    expect(prisma.event.create).toHaveBeenCalledTimes(1);
-    expect(prisma.eventDaily.upsert).toHaveBeenCalledTimes(1);
-    expect(prisma.events.size).toBe(1);
-  });
-
-  it('consumer ignores malformed kafka json payloads', async () => {
-    await publishToConsumer('{');
-
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-  });
-
-  it('consumer rejects invalid timestamps', async () => {
-    await expect(
-      publishToConsumer({
-        eventId: 'evt_bad_timestamp',
-        websiteId: 'website_1',
-        type: EventType.PAGEVIEW,
-        timestamp: Number.NaN,
-      }),
-    ).rejects.toThrow('Invalid event timestamp in Kafka message');
   });
 });

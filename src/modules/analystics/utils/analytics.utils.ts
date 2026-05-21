@@ -37,7 +37,10 @@ export function groupCustomEvents<TEvent extends EventPointLike>(
 
     for (const [key, value] of extractMetadataPairs(event.metadata)) {
       const breakdownKey = `${key}:${value}`;
-      group.metadata.set(breakdownKey, (group.metadata.get(breakdownKey) ?? 0) + 1);
+      group.metadata.set(
+        breakdownKey,
+        (group.metadata.get(breakdownKey) ?? 0) + 1,
+      );
     }
 
     groups.set(name, group);
@@ -57,7 +60,9 @@ export function mapCustomEventRows(
     }
   >,
   total: number,
-  toSortedRows: (counts: Map<string, number>) => Array<{ value: string; count: number }>,
+  toSortedRows: (
+    counts: Map<string, number>,
+  ) => Array<{ value: string; count: number }>,
 ) {
   return rows.map((row) => {
     const group = groups.get(row.value);
@@ -87,7 +92,10 @@ export function mapCustomEventRows(
   });
 }
 
-export function buildTopPageMetrics<TSession extends SessionPointLike, TEvent extends EventPointLike>(
+export function buildTopPageMetrics<
+  TSession extends SessionPointLike,
+  TEvent extends EventPointLike,
+>(
   sessions: TSession[],
   events: TEvent[],
   groupEventsBySession: (items: TEvent[]) => Map<string, TEvent[]>,
@@ -102,7 +110,9 @@ export function buildTopPageMetrics<TSession extends SessionPointLike, TEvent ex
 
   for (const session of sessions) {
     const eventsForSession = sessionEvents.get(session.id) ?? [];
-    const pageviews = eventsForSession.filter((event) => event.type === EventType.PAGEVIEW);
+    const pageviews = eventsForSession.filter(
+      (event) => event.type === EventType.PAGEVIEW,
+    );
     const pagePaths = pageviews
       .map((event) => normalizePagePath(event.url))
       .filter((value): value is string => Boolean(value));
@@ -133,7 +143,10 @@ export function buildTopPageMetrics<TSession extends SessionPointLike, TEvent ex
 
       const nextEvent = eventsForSession[index + 1];
       const endTime = nextEvent?.occurredAt ?? session.lastSeenAt;
-      const duration = Math.max(0, endTime.getTime() - event.occurredAt.getTime());
+      const duration = Math.max(
+        0,
+        endTime.getTime() - event.occurredAt.getTime(),
+      );
 
       pageCounts.set(path, (pageCounts.get(path) ?? 0) + 1);
       durationTotals.set(path, (durationTotals.get(path) ?? 0) + duration);
@@ -149,7 +162,10 @@ export function buildTopPageMetrics<TSession extends SessionPointLike, TEvent ex
   };
 }
 
-export function buildBehaviorMetrics<TSession extends SessionPointLike, TEvent extends EventPointLike>(
+export function buildBehaviorMetrics<
+  TSession extends SessionPointLike,
+  TEvent extends EventPointLike,
+>(
   sessions: TSession[],
   events: TEvent[],
   groupEventsBySession: (items: TEvent[]) => Map<string, TEvent[]>,
@@ -193,11 +209,17 @@ export function buildBehaviorMetrics<TSession extends SessionPointLike, TEvent e
 
     totalPages += pages.length;
     entryCounts.set(pages[0], (entryCounts.get(pages[0]) ?? 0) + 1);
-    exitCounts.set(pages[pages.length - 1], (exitCounts.get(pages[pages.length - 1]) ?? 0) + 1);
+    exitCounts.set(
+      pages[pages.length - 1],
+      (exitCounts.get(pages[pages.length - 1]) ?? 0) + 1,
+    );
 
     for (let index = 0; index < pages.length - 1; index += 1) {
       const transition = `${pages[index]} -> ${pages[index + 1]}`;
-      transitionCounts.set(transition, (transitionCounts.get(transition) ?? 0) + 1);
+      transitionCounts.set(
+        transition,
+        (transitionCounts.get(transition) ?? 0) + 1,
+      );
       totalTransitions += 1;
     }
   }
@@ -304,7 +326,10 @@ export function resolveTrafficSource(
 ) {
   const utmSource = readMetadataString(metadata, ['utm_source', 'source']);
   const utmMedium = readMetadataString(metadata, ['utm_medium', 'medium']);
-  const utmCampaign = readMetadataString(metadata, ['utm_campaign', 'campaign']);
+  const utmCampaign = readMetadataString(metadata, [
+    'utm_campaign',
+    'campaign',
+  ]);
 
   if (utmSource) {
     return {
@@ -323,8 +348,12 @@ export function resolveTrafficSource(
   }
 
   try {
-    const host = new URL(referrer).hostname.replace(/^www\./i, '').toLowerCase();
-    const normalizedWebsiteDomain = websiteDomain.replace(/^www\./i, '').toLowerCase();
+    const host = new URL(referrer).hostname
+      .replace(/^www\./i, '')
+      .toLowerCase();
+    const normalizedWebsiteDomain = websiteDomain
+      .replace(/^www\./i, '')
+      .toLowerCase();
 
     if (host === normalizedWebsiteDomain) {
       return {
@@ -380,7 +409,9 @@ export function extractMetadataPairs(metadata: unknown) {
   return result;
 }
 
-export function groupEventsBySession<TEvent extends EventPointLike>(events: TEvent[]) {
+export function groupEventsBySession<TEvent extends EventPointLike>(
+  events: TEvent[],
+) {
   const grouped = new Map<string, TEvent[]>();
   for (const event of events) {
     if (!event.sessionId) {
@@ -401,7 +432,9 @@ export function groupEventsBySession<TEvent extends EventPointLike>(events: TEve
   return grouped;
 }
 
-export function resolveCurrentPage<TEvent extends EventPointLike>(events: TEvent[]) {
+export function resolveCurrentPage<TEvent extends EventPointLike>(
+  events: TEvent[],
+) {
   const pageviews = events
     .filter((event) => event.type === EventType.PAGEVIEW)
     .map((event) => normalizePagePath(event.url))
@@ -441,7 +474,9 @@ export function resolveGeoCity(eventsMetadata: unknown[], country: string) {
 }
 
 export function resolveRetentionIdentity(session: SessionWithOptionalIdentity) {
-  return session.userId ?? session.externalSessionId ?? session.ip ?? session.id;
+  return (
+    session.userId ?? session.externalSessionId ?? session.ip ?? session.id
+  );
 }
 
 export function bucketDate(date: Date, granularity: 'day' | 'week') {
@@ -454,7 +489,11 @@ export function bucketDate(date: Date, granularity: 'day' | 'week') {
   }
 
   return new Date(
-    Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()),
+    Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate(),
+    ),
   );
 }
 
@@ -463,8 +502,11 @@ export function calculatePeriodIndex(
   date: Date,
   granularity: 'day' | 'week',
 ) {
-  const unitMs = granularity === 'week' ? DAYS_PER_WEEK * MILLIS_PER_DAY : MILLIS_PER_DAY;
-  return Math.floor((bucketDate(date, granularity).getTime() - cohortStart.getTime()) / unitMs);
+  const unitMs =
+    granularity === 'week' ? DAYS_PER_WEEK * MILLIS_PER_DAY : MILLIS_PER_DAY;
+  return Math.floor(
+    (bucketDate(date, granularity).getTime() - cohortStart.getTime()) / unitMs,
+  );
 }
 
 export function getCohortEnd(cohortStart: Date, granularity: 'day' | 'week') {
@@ -476,7 +518,9 @@ export function getCohortEnd(cohortStart: Date, granularity: 'day' | 'week') {
 }
 
 export function getUtcDayStart(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }
 
 export function buildFunnelDropoff(steps: Array<{ count: number }>) {
@@ -487,8 +531,9 @@ export function buildFunnelDropoff(steps: Array<{ count: number }>) {
       dropoff:
         index === 0 || previous <= 0
           ? null
-          : Math.round(((previous - step.count) / previous) * RATE_PRECISION_FACTOR) /
-            RATE_PRECISION_FACTOR,
+          : Math.round(
+              ((previous - step.count) / previous) * RATE_PRECISION_FACTOR,
+            ) / RATE_PRECISION_FACTOR,
       conversionRate:
         index === 0 || previous <= 0
           ? null
@@ -505,7 +550,11 @@ export function normalizeLabel(value: string | null | undefined) {
 
 export function normalizeDevice(device: string | null) {
   const label = normalizeLabel(device).toLowerCase();
-  if (label.includes('mobile') || label.includes('phone') || label.includes('tablet')) {
+  if (
+    label.includes('mobile') ||
+    label.includes('phone') ||
+    label.includes('tablet')
+  ) {
     return 'mobile';
   }
   if (
@@ -528,14 +577,21 @@ export function toSortedRows(counts: Map<string, number>) {
     );
 }
 
-export function buildMobileVsDesktop(counts: Map<string, number>, total: number) {
+export function buildMobileVsDesktop(
+  counts: Map<string, number>,
+  total: number,
+) {
   const mobile = counts.get('mobile') ?? 0;
   const desktop = counts.get('desktop') ?? 0;
   const other = Math.max(0, total - mobile - desktop);
 
   return [
     { value: 'mobile', count: mobile, share: total > 0 ? mobile / total : 0 },
-    { value: 'desktop', count: desktop, share: total > 0 ? desktop / total : 0 },
+    {
+      value: 'desktop',
+      count: desktop,
+      share: total > 0 ? desktop / total : 0,
+    },
     { value: 'other', count: other, share: total > 0 ? other / total : 0 },
   ];
 }
@@ -560,7 +616,10 @@ export function calculateBounceRate<
     }
   }
 
-  return Math.round((bouncedSessions / sessions.length) * RATE_PRECISION_FACTOR) / RATE_PRECISION_FACTOR;
+  return (
+    Math.round((bouncedSessions / sessions.length) * RATE_PRECISION_FACTOR) /
+    RATE_PRECISION_FACTOR
+  );
 }
 
 export function buildDailyBounceRates<

@@ -105,7 +105,10 @@ export class MetricsService {
       referer: input.referer,
     });
 
-    const externalEventId = normalizeString(input.dto.eventId, MAX_LEN.EVENT_ID);
+    const externalEventId = normalizeString(
+      input.dto.eventId,
+      MAX_LEN.EVENT_ID,
+    );
     if (!externalEventId) {
       throw new BadRequestException('eventId is required');
     }

@@ -17,7 +17,7 @@ export class WebsiteService {
   constructor(private readonly prismaService: PrismaService) {}
 
   async findAll(userId: string) {
-    return this.prismaService.website.findMany({
+    return await this.prismaService.website.findMany({
       where: { userId },
       select: {
         id: true,

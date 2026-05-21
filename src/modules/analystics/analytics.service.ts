@@ -36,7 +36,6 @@ import {
   calculatePeriodIndex,
   extractMetadataPairs,
   getCohortEnd,
-  getUtcDayStart,
   groupCustomEvents,
   groupEventsBySession,
   mapCustomEventRows,
@@ -57,7 +56,12 @@ import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { FunnelQueryDto } from './dto/funnel-query.dto';
 import { RealtimeQueryDto } from './dto/realtime-query.dto';
 import { RetentionQueryDto } from './dto/retention-query.dto';
-import type { EventPoint, Range, RangeSnapshot, SessionPoint } from './types/analytics.types';
+import type {
+  EventPoint,
+  Range,
+  RangeSnapshot,
+  SessionPoint,
+} from './types/analytics.types';
 
 @Injectable()
 export class AnalyticsService {
@@ -201,7 +205,8 @@ export class AnalyticsService {
           count: row.count,
           share: total > 0 ? row.count / total : 0,
           avgTimeOnPageMs: Math.round(
-            (metrics.durationTotals.get(row.value) ?? 0) / Math.max(row.count, 1),
+            (metrics.durationTotals.get(row.value) ?? 0) /
+              Math.max(row.count, 1),
           ),
           bounceRate:
             entryCount > 0
@@ -324,7 +329,10 @@ export class AnalyticsService {
       journeysTotal: sessions.length,
       journeysLimit: sessionLimit,
       journeys,
-      topEntryPages: toSortedRows(behavior.entryCounts).slice(0, TOP_PAGES_LIMIT),
+      topEntryPages: toSortedRows(behavior.entryCounts).slice(
+        0,
+        TOP_PAGES_LIMIT,
+      ),
       topExitPages: toSortedRows(behavior.exitCounts).slice(0, TOP_PAGES_LIMIT),
       avgPagesPerSession:
         sessions.length > 0
@@ -449,11 +457,14 @@ export class AnalyticsService {
     query: RealtimeQueryDto,
   ) {
     await this.assertWebsiteOwnership(userId, websiteId);
-    const windowMinutes = query.windowMinutes ?? DEFAULT_REALTIME_WINDOW_MINUTES;
+    const windowMinutes =
+      query.windowMinutes ?? DEFAULT_REALTIME_WINDOW_MINUTES;
     const activeSessionsLimit =
       query.sessionLimit ?? query.limit ?? DEFAULT_REALTIME_SESSION_LIMIT;
     const now = new Date();
-    const from = new Date(now.getTime() - windowMinutes * 60 * MILLIS_PER_SECOND);
+    const from = new Date(
+      now.getTime() - windowMinutes * 60 * MILLIS_PER_SECOND,
+    );
     const range = { from, to: now };
 
     const [sessions, events] = await Promise.all([
@@ -511,7 +522,8 @@ export class AnalyticsService {
     websiteId: string,
     query: RealtimeQueryDto,
   ): Observable<MessageEvent> {
-    const refreshSeconds = query.refreshSeconds ?? DEFAULT_REALTIME_REFRESH_SECONDS;
+    const refreshSeconds =
+      query.refreshSeconds ?? DEFAULT_REALTIME_REFRESH_SECONDS;
 
     return interval(refreshSeconds * 1000).pipe(
       startWith(0),
@@ -786,8 +798,9 @@ export class AnalyticsService {
       steps,
       totalConversionRate:
         landingCount > 0
-          ? Math.round((conversionCount / landingCount) * RATE_PRECISION_FACTOR) /
-            RATE_PRECISION_FACTOR
+          ? Math.round(
+              (conversionCount / landingCount) * RATE_PRECISION_FACTOR,
+            ) / RATE_PRECISION_FACTOR
           : 0,
       dropoff: buildFunnelDropoff(steps),
     };
@@ -903,7 +916,7 @@ export class AnalyticsService {
   }
 
   private async fetchPageviewEvents(websiteId: string, range: Range) {
-    return this.prismaService.event.findMany({
+    return await this.prismaService.event.findMany({
       where: {
         websiteId,
         type: EventType.PAGEVIEW,
@@ -930,7 +943,7 @@ export class AnalyticsService {
   }
 
   private async fetchEvents(websiteId: string, range: Range) {
-    return this.prismaService.event.findMany({
+    return await this.prismaService.event.findMany({
       where: {
         websiteId,
         occurredAt: {
@@ -963,7 +976,7 @@ export class AnalyticsService {
   }
 
   private async fetchSessions(websiteId: string, range: Range) {
-    return this.prismaService.session.findMany({
+    return await this.prismaService.session.findMany({
       where: {
         websiteId,
         createdAt: {
@@ -988,7 +1001,7 @@ export class AnalyticsService {
   }
 
   private async fetchActiveSessions(websiteId: string, range: Range) {
-    return this.prismaService.session.findMany({
+    return await this.prismaService.session.findMany({
       where: {
         websiteId,
         lastSeenAt: {
@@ -1061,5 +1074,4 @@ export class AnalyticsService {
       to: new Date(range.to.getTime() + unitMs * periods),
     };
   }
-
 }
