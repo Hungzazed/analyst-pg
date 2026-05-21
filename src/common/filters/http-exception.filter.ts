@@ -64,7 +64,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return response.message;
     }
 
-    if (statusCode === HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (Number(statusCode) === Number(HttpStatus.BAD_REQUEST)) {
       return 'Internal server error';
     }
 

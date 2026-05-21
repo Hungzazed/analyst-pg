@@ -5,7 +5,19 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { Pool } from 'pg'; // Đã xóa QueryResultRow, QueryResult, PoolClient không dùng đến
+
+// 1. Định nghĩa interface rõ ràng cho cấu hình Postgres
+interface PostgresConfig {
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  maxPoolSize?: number;
+  idleTimeoutMs?: number;
+  connectionTimeoutMs?: number;
+}
 
 @Injectable()
 export class PostgresService implements OnModuleInit, OnModuleDestroy {
@@ -15,7 +27,8 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
-    const config = this.configService.get('postgres');
+    // 2. Ép kiểu (Type Assertion) từ any sang PostgresConfig để ESLint không bắt lỗi
+    const config = this.configService.get<PostgresConfig>('postgres') || {};
 
     this.pool = new Pool({
       host: config.host,
@@ -32,8 +45,10 @@ export class PostgresService implements OnModuleInit, OnModuleDestroy {
       await this.pool.query('SELECT 1');
       this.logger.log('Connected to PostgreSQL successfully');
     } catch (error) {
-      this.logger.error('Failed to connect to PostgreSQL', error);
-      throw error;
+      // 3. Ép kiểu error thành Error object hoặc unknown để log an toàn
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Failed to connect to PostgreSQL', err.stack);
+      throw err;
     }
   }
 
