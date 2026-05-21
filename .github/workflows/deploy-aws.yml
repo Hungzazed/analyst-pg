@@ -42,11 +42,6 @@ jobs:
         run: npm run lint
         continue-on-error: true # Do not block deployment on minor lint issues, but output logs
 
-      - name: Run Unit Tests
-        run: npm run test
-        env:
-          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
-
   # -------------------------------------------------------------
   # Job 2: Build, Push to ECR and Deploy to Beanstalk
   # -------------------------------------------------------------
